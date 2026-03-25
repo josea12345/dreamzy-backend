@@ -18,7 +18,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v5" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v6" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -229,6 +229,8 @@ app.post("/generate-full-story", async (req, res) => {
     const improvedPage = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     storyData.pages[storyData.pages.length - 1] = improvedPage;
     console.log("ENDING_CHECK:", JSON.stringify(improvedPage.lines));
+    // Also fix the illustration prompt so image matches the new ending
+    storyData.pages[storyData.pages.length - 1].illustrationPrompt = `${childName} looking happy and triumphant at the end of a great adventure. ${improvedPage.lines.join(' ')} Warm golden light. Joyful scene. No sleeping.`;
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
