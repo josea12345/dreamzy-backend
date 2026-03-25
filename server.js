@@ -223,7 +223,9 @@ app.post("/generate-full-story", async (req, res) => {
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null);
     // Improve the final page ending
-    storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
+    const improvedPage = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
+    storyData.pages[storyData.pages.length - 1] = improvedPage;
+    console.log("Final page lines after improvement:", improvedPage.lines);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
@@ -261,7 +263,7 @@ app.post("/generate-full-story", async (req, res) => {
         episode,
         storySummary: storyData.storySummary,
         characters: storyData.characters,
-        pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
+        pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i], lines: p.lines }))
       }
     });
   } catch (e) {
