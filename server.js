@@ -179,6 +179,7 @@ async function generateVoice(text, ageNum) {
 app.post("/generate-full-story", async (req, res) => {
   const { childName, age, interests, theme, mood, previousStory, illustrationStyle } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
+  console.log("Using illustration style:", imgStyle);
   if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
   const ageNum = parseInt(age) || 5;
   try {
