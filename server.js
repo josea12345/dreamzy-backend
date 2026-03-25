@@ -21,15 +21,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 app.get("/", (req, res) => res.json({ status: "Dreamzy running" }));
 
 const STYLE_PROMPTS = {
-  cartoon: "modern cartoon illustration, Pixar and Bluey inspired, bold outlines, bright flat colors, expressive cute characters",
-  watercolor: "watercolor illustration, soft painterly washes, gentle pastel colors, delicate brushstrokes, dreamy and tender",
-  whimsical: "whimsical fantasy illustration, magical and dreamy, soft glowing colors, fairytale aesthetic, enchanting",
-  vintage: "vintage storybook illustration, retro children's book style, warm aged tones, classic 1950s illustration, nostalgic",
-  line: "clean line drawing illustration, bold black outlines, simple flat colors, minimal detail, graphic and crisp",
-  realistic: "realistic detailed illustration, lifelike proportions, rich colors, painterly textures, professional children's book art",
-  abstract: "abstract illustration style, Dr. Seuss inspired, exaggerated shapes and colors, imaginative and surreal, bold graphic shapes",
-  moody: "moody atmospheric illustration, dramatic lighting, deep rich colors, cinematic children's book style, emotional",
-  wimmelbuch: "wimmelbuch style illustration, richly detailed scene, lots of characters and objects, busy and colorful",
+  cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
+  watercolor: "STYLE: traditional watercolor painting. Soft wet washes of color. Visible brushstrokes and paper texture. Colors bleed into each other. Gentle pastel palette. Dreamy soft edges. NO sharp outlines. NO digital look. NO cartoon style.",
+  whimsical: "STYLE: whimsical storybook illustration. Magical glowing light. Soft dreamy colors. Fairytale aesthetic. Sparkles and magical elements. Soft rounded shapes. Like a modern fairy tale book. NO realistic lighting. NO harsh lines.",
+  vintage: "STYLE: vintage 1950s children's book illustration. Aged paper texture. Muted warm earth tones. Classic retro printing style. Slightly faded colors. Hatching and cross-hatching. Like old Golden Books. NO bright saturated colors. NO modern digital style.",
+  line: "STYLE: clean line art illustration. Bold crisp black outlines on white. Minimal flat color fills. Graphic and simple. Like a high-quality coloring book. Strong negative space. NO gradients. NO shading. NO watercolor. NO textures.",
+  realistic: "STYLE: detailed realistic illustration. Painterly realistic style. Accurate proportions. Rich textures and lighting. Like a professional picture book with realistic art. Detailed backgrounds. NO cartoon exaggeration. NO flat colors.",
+  abstract: "STYLE: abstract Dr. Seuss inspired illustration. Wild exaggerated shapes. Impossible colors and forms. Surreal and imaginative. Wobbly lines. Unconventional compositions. NO realistic proportions. NO normal perspective. Very stylized.",
+  moody: "STYLE: moody cinematic illustration. Dramatic chiaroscuro lighting. Deep shadows. Rich jewel tone colors. Dark atmospheric backgrounds with bright focal points. Painterly. Emotional. Like a dark fairy tale. NO bright cheerful colors. NO flat style.",
+  wimmelbuch: "STYLE: wimmelbuch busy scene illustration. Packed with tiny detailed characters and objects everywhere. Top-down or isometric view. Every corner filled with activity. Like Where's Waldo. Bright colors. Lots of humor and hidden details. NO simple compositions.",
 };
 
 function getAgeStyle(age) {
@@ -139,10 +139,11 @@ async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
   try {
+    const fullPrompt = stylePrompt + " Scene: " + prompt + ". Character appearance: " + characterDescription + ". Child-friendly. No text or words in the image.";
     const response = await axios.post(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" + process.env.GEMINI_KEY,
       {
-        contents: [{ parts: [{ text: prompt + ". Character: " + characterDescription + ". Style: " + stylePrompt + ", warm pastel colors, child-friendly storybook art, no text in image." }] }],
+        contents: [{ parts: [{ text: fullPrompt }] }],
         generationConfig: { responseModalities: ["IMAGE", "TEXT"] }
       },
       { headers: { "Content-Type": "application/json" } }
