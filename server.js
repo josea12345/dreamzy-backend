@@ -41,8 +41,9 @@ function getAgeStyle(age) {
 - Sound play: rhymes, silly words, animal sounds, onomatopoeia
 - Familiar routines: bedtime, food, bath, animals, sleep
 - Every line should have a musical beat you can clap to
-- End calm and sleepy — the child IS going to sleep now
-- NEVER use complex words or multi-clause sentences`,
+- End with a warm cozy feeling — a hug, a smile, the adventure complete
+- NEVER use complex words or multi-clause sentences
+- NEVER end with sleeping, yawning, or bedtime words`,
   };
   if (age <= 5) return {
     range: "3-5", pages: 6,
@@ -51,8 +52,9 @@ function getAgeStyle(age) {
 - Use rhyme where natural — AABB or ABAB patterns
 - Humor: funny twists, surprising turns, silly dialogue
 - Simple emotions: fear becomes courage, alone becomes friendship
-- Clear arc: problem → funny attempts → solution → happy ending
-- Characters have distinct voices — use dialogue`,
+- Clear arc: problem → funny attempts → solution → warm happy ending (NOT sleep)
+- Characters have distinct voices — use dialogue
+- NEVER end with sleeping, yawning, or bedtime words`,
   };
   return {
     range: "5-10", pages: 7,
@@ -62,7 +64,8 @@ function getAgeStyle(age) {
 - Character growth: the hero learns something or changes by the end
 - Light conflict: a real problem the child must solve using cleverness
 - Humor with wit — jokes kids feel smart for understanding
-- The child's INTERESTS are central to solving the problem`,
+- The child's INTERESTS are central to solving the problem
+- NEVER end with sleeping, yawning, or bedtime words — end with triumph or warmth`,
   };
 }
 
