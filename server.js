@@ -98,10 +98,10 @@ RULES:
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("No JSON found");
     res.json({ story: JSON.parse(match[0]) });
-  } catch (e) {
-    console.error("Story error:", e.message);
-    res.status(500).json({ error: e.message });
-  }
+  } } catch (e) {
+    console.error("Full error:", e);
+    res.status(500).json({ error: e.message, stack: e.stack });
+}
 });
 
 // ── Generate image ────────────────────────────────────────────────────────────
