@@ -228,7 +228,7 @@ app.post("/generate-full-story", async (req, res) => {
     // Improve the final page ending
     const improvedPage = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     storyData.pages[storyData.pages.length - 1] = improvedPage;
-    console.log("Final page lines after improvement:", improvedPage.lines);
+    console.log("ENDING_CHECK:", JSON.stringify(improvedPage.lines));
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
