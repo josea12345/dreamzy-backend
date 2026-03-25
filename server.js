@@ -8,7 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 const app = express();
-app.use(cors({ origin: ["https://dreamzy-cr4hzozu3-josea12345s-projects.vercel.app", "https://dreamzy.xyz", "https://www.dreamzy.xyz", "http://localhost:5173"] }));
+app.use(cors());
 
 // Raw body for webhook signature verification
 app.use("/webhook/lemonsqueezy", express.raw({ type: "application/json" }));
@@ -98,10 +98,10 @@ RULES:
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("No JSON found");
     res.json({ story: JSON.parse(match[0]) });
-  } } catch (e) {
-    console.error("Full error:", e);
-    res.status(500).json({ error: e.message, stack: e.stack });
-}
+  } catch (e) {
+    console.error("Story error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Generate image ────────────────────────────────────────────────────────────
@@ -271,5 +271,5 @@ app.get("/checkout-urls", (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, "0.0.0.0", () => console.log("Dreamzy backend running on port " + PORT));
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log("Dreamzy backend running on http://localhost:" + PORT));
