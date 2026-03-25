@@ -20,6 +20,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 app.get("/", (req, res) => res.json({ status: "Dreamzy running" }));
 
+const STYLE_PROMPTS = {
+  cartoon: "modern cartoon illustration, Pixar and Bluey inspired, bold outlines, bright flat colors, expressive cute characters",
+  watercolor: "watercolor illustration, soft painterly washes, gentle pastel colors, delicate brushstrokes, dreamy and tender",
+  whimsical: "whimsical fantasy illustration, magical and dreamy, soft glowing colors, fairytale aesthetic, enchanting",
+  vintage: "vintage storybook illustration, retro children's book style, warm aged tones, classic 1950s illustration, nostalgic",
+  line: "clean line drawing illustration, bold black outlines, simple flat colors, minimal detail, graphic and crisp",
+  realistic: "realistic detailed illustration, lifelike proportions, rich colors, painterly textures, professional children's book art",
+  abstract: "abstract illustration style, Dr. Seuss inspired, exaggerated shapes and colors, imaginative and surreal, bold graphic shapes",
+  moody: "moody atmospheric illustration, dramatic lighting, deep rich colors, cinematic children's book style, emotional",
+  wimmelbuch: "wimmelbuch style illustration, richly detailed scene, lots of characters and objects, busy and colorful",
+};
+
 function getAgeStyle(age) {
   if (age <= 3) return {
     range: "1-3", pages: 5,
@@ -59,7 +71,7 @@ async function generateStoryWithRetry(childName, age, interests, theme, mood, pr
   try {
     return await generateStory(childName, age, interests, theme, mood, previousStory);
   } catch (e) {
-    if ((e?.response?.status === 529 || e?.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
+    if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
       return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, attempt + 1);
@@ -123,13 +135,14 @@ RULES:
   return JSON.parse(match[0]);
 }
 
-async function generateImage(prompt, characterDescription, attempt) {
+async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
+  const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
   try {
     const response = await axios.post(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" + process.env.GEMINI_KEY,
       {
-        contents: [{ parts: [{ text: prompt + ". Character: " + characterDescription + ". Style: modern cartoon illustration, Pixar and Bluey inspired, bold outlines, bright flat colors, expressive cute characters, warm pastel colors, child-friendly storybook art, no text in image." }] }],
+        contents: [{ parts: [{ text: prompt + ". Character: " + characterDescription + ". Style: " + stylePrompt + ", warm pastel colors, child-friendly storybook art, no text in image." }] }],
         generationConfig: { responseModalities: ["IMAGE", "TEXT"] }
       },
       { headers: { "Content-Type": "application/json" } }
@@ -143,7 +156,7 @@ async function generateImage(prompt, characterDescription, attempt) {
     if (e.response?.status === 429 && attempt < 3) {
       console.log("    Rate limited, waiting 10s...");
       await sleep(10000);
-      return generateImage(prompt, characterDescription, attempt + 1);
+      return generateImage(prompt, characterDescription, style, attempt + 1);
     }
     throw e;
   }
@@ -164,7 +177,8 @@ async function generateVoice(text, ageNum) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle } = req.body;
+  const imgStyle = illustrationStyle || "cartoon";
   if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
   const ageNum = parseInt(age) || 5;
   try {
@@ -178,7 +192,7 @@ app.post("/generate-full-story", async (req, res) => {
     const imageUrls = await Promise.all(
       storyData.pages.map(async (page, i) => {
         console.log("  Image " + (i+1) + "/" + storyData.pages.length + "...");
-        try { return await generateImage(page.illustrationPrompt, storyData.characterDescription); }
+        try { return await generateImage(page.illustrationPrompt, storyData.characterDescription, imgStyle); }
         catch (e) { console.error("  Image " + (i+1) + " failed:", e.message); return null; }
       })
     );
