@@ -8,7 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 const app = express();
-app.use(cors());
+app.use(cors({ origin: ["https://dreamzy-cr4hzozu3-josea12345s-projects.vercel.app", "https://dreamzy.com", "http://localhost:5173"] }));
 
 // Raw body for webhook signature verification
 app.use("/webhook/lemonsqueezy", express.raw({ type: "application/json" }));
