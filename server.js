@@ -271,5 +271,5 @@ app.get("/checkout-urls", (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => console.log("Dreamzy backend running on port " + PORT));
