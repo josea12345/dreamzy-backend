@@ -54,20 +54,42 @@ function getAgeStyle(age) {
   };
 }
 
-async function generateStory(childName, age, interests, theme, mood) {
+async function generateStory(childName, age, interests, theme, mood, previousStory) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum);
+
+  const continuationContext = previousStory ? `
+IMPORTANT — THIS IS A CONTINUATION (Episode ${(previousStory.episode || 1) + 1}):
+Previous story title: "${previousStory.title}"
+What happened before: ${previousStory.story_summary || "An adventure with " + childName}
+Characters established: ${JSON.stringify(previousStory.characters || {})}
+
+Rules for continuation:
+- Reference what happened in the previous episode naturally
+- Bring back the same supporting characters (friends, creatures, magical objects)
+- The world and setting should feel consistent and familiar
+- Start with a callback to the previous story ("The next morning..." / "One week later...")
+- End with a hint that another adventure is coming (builds anticipation for episode ${(previousStory.episode || 1) + 2})
+- This is episode ${(previousStory.episode || 1) + 1} in ${childName}'s ongoing adventures
+` : "";
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4000,
     system: `You are a master children's book author. Write a personalized bedtime story for a ${ageNum}-year-old child.
 ${ageStyle.style}
+${continuationContext}
 Return ONLY valid JSON:
 {
-  "title": "Catchy story title featuring ${childName}",
+  "title": "Catchy episode title featuring ${childName}",
   "ageRange": "${ageStyle.range}",
   "characterDescription": "Brief consistent physical description of ${childName} for illustration consistency",
+  "storySummary": "2-3 sentence summary of what happened in this story — used for future episode context",
+  "characters": {
+    "protagonist": "${childName} description",
+    "supporting": ["character name and brief description", "another character"]
+  },
   "pages": [{"pageNumber":1,"lines":["line 1","line 2"],"illustrationPrompt":"Detailed scene description","soundNote":"reading tone"}]
 }
 RULES:
@@ -76,9 +98,11 @@ RULES:
 - Weave in these interests as CENTRAL to the plot: ${interestList}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
 - Include characterDescription in every illustrationPrompt for visual consistency
-- Final page ALWAYS ends with ${childName} falling asleep`,
+- Final page ALWAYS ends with ${childName} falling asleep
+- storySummary MUST capture key events and characters for future episodes`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
+
   const text = response.content.map(b => b.text || "").join("");
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("No JSON found");
@@ -125,25 +149,15 @@ async function generateVoice(text, ageNum) {
   return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
 }
 
-app.post("/generate-story", async (req, res) => {
-  const { childName, age, interests, theme, mood } = req.body;
-  if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
-  try {
-    const story = await generateStory(childName, age, interests, theme, mood);
-    res.json({ story });
-  } catch (e) {
-    console.error("Story error:", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood } = req.body;
+  const { childName, age, interests, theme, mood, previousStory } = req.body;
   if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
   const ageNum = parseInt(age) || 5;
   try {
-    console.log("Generating story for " + childName + " (age " + ageNum + ")...");
-    const storyData = await generateStory(childName, age, interests, theme, mood);
+    const isContinuation = !!previousStory;
+    console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
+
+    const storyData = await generateStory(childName, age, interests, theme, mood, previousStory || null);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
@@ -166,7 +180,10 @@ app.post("/generate-full-story", async (req, res) => {
       })
     );
 
-    console.log("Story complete!");
+    const seriesId = previousStory?.series_id || (childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now());
+    const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
+
+    console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
     res.json({
       story: {
         title: storyData.title,
@@ -174,13 +191,15 @@ app.post("/generate-full-story", async (req, res) => {
         age: ageNum,
         ageRange: storyData.ageRange,
         createdAt: new Date().toISOString(),
+        seriesId,
+        episode,
+        storySummary: storyData.storySummary,
+        characters: storyData.characters,
         pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
       }
     });
   } catch (e) {
-    console.error("Error name:", e.name);
-    console.error("Error message:", e.message);
-    console.error("Error stack:", e.stack);
+    console.error("Error:", e.message, e.stack);
     res.status(500).json({ error: e.message || "Unknown error" });
   }
 });
@@ -212,10 +231,7 @@ app.post("/webhook/lemonsqueezy", async (req, res) => {
   const signature = req.headers["x-signature"];
   const hmac = crypto.createHmac("sha256", secret);
   const digest = hmac.update(req.body).digest("hex");
-  if (signature !== digest) {
-    console.error("Invalid webhook signature");
-    return res.status(401).json({ error: "Invalid signature" });
-  }
+  if (signature !== digest) return res.status(401).json({ error: "Invalid signature" });
   const payload = JSON.parse(req.body.toString());
   const eventName = payload.meta?.event_name;
   const customerEmail = payload.data?.attributes?.user_email;
