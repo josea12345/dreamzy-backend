@@ -185,7 +185,20 @@ Age: ${ageNum}` }],
   } catch(e) {
     console.error("Ending improvement failed:", e.message);
   }
-  return finalPage;
+
+  // Hardcoded fallback — replace final page lines with a non-sleep ending
+  const fallbackEndings = [
+    [`${childName} laughs and cheers — what an adventure!`, `"Let's do it again!" ${childName} says.`],
+    [`The sun dips low, painting the sky gold.`, `${childName} smiles — a perfect day.`],
+    [`${childName} hugs their new friend tight.`, `Some days are magic. This was one.`],
+    [`"Best adventure ever!" ${childName} grins.`, `Tomorrow holds even more to explore.`],
+    [`${childName} looks up at the twinkling stars.`, `Heart full, the world feels wonderful.`],
+    [`Hand in hand, they walk toward home.`, `${childName} can't wait to come back.`],
+    [`A big warm hug — the day is done.`, `${childName} smiles from ear to ear.`],
+  ];
+  const fallback = fallbackEndings[Math.floor(Math.random() * fallbackEndings.length)];
+  console.log("Using fallback ending:", fallback);
+  return { ...finalPage, lines: fallback };
 }
 
 async function generateImage(prompt, characterDescription, style, attempt) {
