@@ -59,7 +59,7 @@ async function generateStoryWithRetry(childName, age, interests, theme, mood, pr
   try {
     return await generateStory(childName, age, interests, theme, mood, previousStory);
   } catch (e) {
-    if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
+    if ((e?.response?.status === 529 || e?.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
       return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, attempt + 1);
