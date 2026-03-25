@@ -103,7 +103,7 @@ Rules for continuation:
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4000,
-    system: `You are a master children's book author. Write a personalized bedtime story for a ${ageNum}-year-old child.
+    system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child. This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
 ${continuationContext}
 Return ONLY valid JSON:
@@ -124,13 +124,9 @@ RULES:
 - Weave in these interests as CENTRAL to the plot: ${interestList}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
 - Include characterDescription in every illustrationPrompt for visual consistency
-- Final page MUST end in a cozy satisfying way but NEVER with the child literally falling asleep or going to bed. Instead use one of these:
-  * Heading home happy as stars appear in the sky
-  * Curling up with a new friend, hearts full of joy
-  * Waving goodbye to the magical world they discovered
-  * Sitting quietly watching the sunset, smiling to themselves
-  * Whispering "until next time" to their new adventure
-  FORBIDDEN: Do NOT write "fell asleep", "closed their eyes", "drifted off", "time for bed", "went to sleep", or any sleeping imagery on the final page
+- Final page: End with a warm satisfying moment — arriving home, a hug, watching stars, a promise of tomorrow. 
+  ABSOLUTE RULE: Zero sleeping words. "Sleep", "bed", "tired", "yawn", "dream", "eyes closed", "night-night" are ALL banned from the final page.
+  The story ends happy and complete, not with the child going to sleep.
 - storySummary MUST capture key events and characters for future episodes`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
