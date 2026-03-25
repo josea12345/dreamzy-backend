@@ -149,6 +149,45 @@ RULES:
 
 
 
+// Regenerate final page with a better ending
+async function improveEnding(finalPage, childName, theme, ageNum) {
+  const endingStyles = [
+    `A warm hug and a shared laugh between ${childName} and their friend`,
+    `${childName} looks up at the stars, heart full of wonder`,
+    `${childName} heads home as the sun sets, smiling at the adventure`,
+    `${childName} and a friend sit quietly together, happy and content`,
+    `${childName} discovers something magical and gasps with delight`,
+    `Everyone cheers for ${childName} — the adventure was a success!`,
+    `${childName} makes a promise: "We'll do this again tomorrow!"`,
+    `The world feels bigger and more magical than before`,
+    `${childName} takes a deep breath of the evening air, perfectly happy`,
+    `A moment of quiet wonder — ${childName} smiles at what they've done`,
+  ];
+  const randomEnding = endingStyles[Math.floor(Math.random() * endingStyles.length)];
+  
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 200,
+      system: `You are a children's book author. Rewrite these final page lines to match this ending feeling: "${randomEnding}". Keep the same age-appropriate language and style. Keep exactly the same number of lines. Return ONLY the new lines as a JSON array, nothing else. Example: ["Line one.", "Line two."]`,
+      messages: [{ role: "user", content: `Original lines: ${JSON.stringify(finalPage.lines)}
+Child's name: ${childName}
+Theme: ${theme}
+Age: ${ageNum}` }],
+    });
+    const text = response.content.map(b => b.text || "").join("");
+    const match = text.match(/\[[\s\S]*\]/);
+    if (match) {
+      const newLines = JSON.parse(match[0]);
+      console.log("Ending improved:", newLines);
+      return { ...finalPage, lines: newLines };
+    }
+  } catch(e) {
+    console.error("Ending improvement failed:", e.message);
+  }
+  return finalPage;
+}
+
 async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
@@ -202,6 +241,8 @@ app.post("/generate-full-story", async (req, res) => {
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null);
+    // Improve the final page ending
+    storyData.pages[storyData.pages.length - 1] = await improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
