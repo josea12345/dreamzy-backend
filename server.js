@@ -140,6 +140,35 @@ RULES:
   return JSON.parse(match[0]);
 }
 
+// Post-process: replace sleep words on final page
+function cleanFinalPage(pages) {
+  const sleepWords = ['sleeps','sleeping','slept','sleep','bedtime','bed','tired','yawn','yawning','yawns','dreams','dreaming','dreamed','drifts off','drifted','snooze','drowsy','night-night','nighty','eyes close','eyes closed','closes her eyes','closes his eyes'];
+  const replacements = {
+    'sleeps': 'smiles', 'sleeping': 'smiling', 'slept': 'smiled',
+    'sleep': 'smile', 'bedtime': 'story time', 'bed': 'home',
+    'tired': 'happy', 'yawn': 'grin', 'yawning': 'grinning', 'yawns': 'grins',
+    'dreams': 'smiles', 'dreaming': 'smiling', 'dreamed': 'smiled',
+    'drifts off': 'heads home', 'drifted': 'smiled',
+    'snooze': 'rest', 'drowsy': 'happy', 'night-night': 'goodbye',
+    'nighty': 'goodbye', 'eyes close': 'heart glows', 'eyes closed': 'heart full',
+    'closes her eyes': 'takes a deep breath', 'closes his eyes': 'takes a deep breath',
+  };
+  const lastPage = pages[pages.length - 1];
+  lastPage.lines = lastPage.lines.map(line => {
+    let cleaned = line;
+    sleepWords.forEach(word => {
+      const regex = new RegExp(word, 'gi');
+      if (regex.test(cleaned)) {
+        const replacement = replacements[word.toLowerCase()] || 'smiles';
+        cleaned = cleaned.replace(regex, replacement);
+        console.log(`Replaced "${word}" with "${replacement}" on final page`);
+      }
+    });
+    return cleaned;
+  });
+  return pages;
+}
+
 async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
@@ -230,7 +259,7 @@ app.post("/generate-full-story", async (req, res) => {
         episode,
         storySummary: storyData.storySummary,
         characters: storyData.characters,
-        pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
+        pages: cleanedPages
       }
     });
   } catch (e) {
