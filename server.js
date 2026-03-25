@@ -153,7 +153,8 @@ app.post("/generate-full-story", async (req, res) => {
   const ageNum = parseInt(age) || 5;
   try {
     console.log("Generating story for " + childName + " (age " + ageNum + ")...");
-    const scriptRes = await axios.post("http://localhost:3001/generate-story", { childName, age, interests, theme, mood });
+    const scriptRes = await axios.post(`http://localhost:${PORT}/generate-story`, { childName, age, interests, theme, mood });
+const story = scriptRes.data.story;
     const story = scriptRes.data.story;
     console.log("Got: \"" + story.title + "\" (" + story.ageRange + ") — " + story.pages.length + " pages");
 
@@ -274,5 +275,5 @@ app.get("/checkout-urls", (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || ${PORT};
 app.listen(PORT, () => console.log("Dreamzy backend running on http://localhost:" + PORT));
