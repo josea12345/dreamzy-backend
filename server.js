@@ -52,7 +52,7 @@ function getAgeStyle(age) {
 - Use rhyme where natural — AABB or ABAB patterns
 - Humor: funny twists, surprising turns, silly dialogue
 - Simple emotions: fear becomes courage, alone becomes friendship
-- Clear arc: problem → funny attempts → solution → warm happy ending (NOT sleep)
+- Clear arc: problem → funny attempts → solution → happy ending
 - Characters have distinct voices — use dialogue
 - NEVER end with sleeping, yawning, or bedtime words`,
   };
@@ -109,6 +109,8 @@ Rules for continuation:
     system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child. This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
 ${continuationContext}
+BANNED WORDS on final page: sleep, sleeping, bed, bedtime, tired, yawn, yawning, dream, dreaming, night-night, snooze, drowsy, eyes closed, drifted off. Use NONE of these.
+
 Return ONLY valid JSON:
 {
   "title": "Catchy episode title featuring ${childName}",
@@ -127,9 +129,7 @@ RULES:
 - Weave in these interests as CENTRAL to the plot: ${interestList}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
 - Include characterDescription in every illustrationPrompt for visual consistency
-- Final page: End with a warm satisfying moment — arriving home, a hug, watching stars, a promise of tomorrow. 
-  ABSOLUTE RULE: Zero sleeping words. "Sleep", "bed", "tired", "yawn", "dream", "eyes closed", "night-night" are ALL banned from the final page.
-  The story ends happy and complete, not with the child going to sleep.
+- Final page: The story ends. Do not mention sleep, bed, dreams, yawning, or tiredness.
 - storySummary MUST capture key events and characters for future episodes`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
