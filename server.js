@@ -54,6 +54,20 @@ function getAgeStyle(age) {
   };
 }
 
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, attempt) {
+  if (attempt === undefined) attempt = 0;
+  try {
+    return await generateStory(childName, age, interests, theme, mood, previousStory);
+  } catch (e) {
+    if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
+      console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
+      await sleep((10 + attempt * 10) * 1000);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, attempt + 1);
+    }
+    throw e;
+  }
+}
+
 async function generateStory(childName, age, interests, theme, mood, previousStory) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
@@ -157,7 +171,7 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStory(childName, age, interests, theme, mood, previousStory || null);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
