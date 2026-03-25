@@ -186,7 +186,10 @@ app.post("/generate-full-story", async (req, res) => {
       }
     });
   } catch (e) {
-    console.error("Error:", e.message);
+    console.error("Error name:", e.name);
+console.error("Error message:", e.message);
+console.error("Error cause:", e.cause);
+console.error("Full:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
     res.status(500).json({ error: e.message });
   }
 });
