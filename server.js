@@ -124,14 +124,13 @@ RULES:
 - Weave in these interests as CENTRAL to the plot: ${interestList}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
 - Include characterDescription in every illustrationPrompt for visual consistency
-- Final page should end in a cozy, satisfying way — vary these endings naturally:
-  * Drifting off to sleep under the stars
-  * Curling up with a new friend they made
-  * Heading home as the sun sets, heart full of adventure
-  * Closing their eyes with a big smile, dreaming of tomorrow
-  * Snuggled up safe and warm, the adventure done for today
-  * Whispering "goodnight" to the world they just explored
-  Choose whichever ending fits the story best — don't always use sleep directly
+- Final page MUST end in a cozy satisfying way but NEVER with the child literally falling asleep or going to bed. Instead use one of these:
+  * Heading home happy as stars appear in the sky
+  * Curling up with a new friend, hearts full of joy
+  * Waving goodbye to the magical world they discovered
+  * Sitting quietly watching the sunset, smiling to themselves
+  * Whispering "until next time" to their new adventure
+  FORBIDDEN: Do NOT write "fell asleep", "closed their eyes", "drifted off", "time for bed", "went to sleep", or any sleeping imagery on the final page
 - storySummary MUST capture key events and characters for future episodes`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
