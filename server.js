@@ -109,8 +109,6 @@ Rules for continuation:
     system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child. This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
 ${continuationContext}
-BANNED WORDS on final page: sleep, sleeping, bed, bedtime, tired, yawn, yawning, dream, dreaming, night-night, snooze, drowsy, eyes closed, drifted off. Use NONE of these.
-
 Return ONLY valid JSON:
 {
   "title": "Catchy episode title featuring ${childName}",
@@ -129,8 +127,17 @@ RULES:
 - Weave in these interests as CENTRAL to the plot: ${interestList}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
 - Include characterDescription in every illustrationPrompt for visual consistency
-- Final page: The story ends. Do not mention sleep, bed, dreams, yawning, or tiredness.
-- storySummary MUST capture key events and characters for future episodes`,
+- storySummary MUST capture key events and characters for future episodes
+- FINAL PAGE ENDINGS — draw inspiration from these master authors and vary each story:
+  * Margaret Wise Brown (Goodnight Moon): poetic, atmospheric, acknowledge the world around them ("the quiet old lady whispering hush")
+  * Mo Willems (Elephant & Piggie): warm friendship moment, a simple shared joy, dialogue that lands with a smile
+  * Julia Donaldson (Gruffalo): a clever twist reveal, the hero realizes their own power, triumphant but humble
+  * Roald Dahl: a touch of magic or mischief lingers, the world feels a little more wonderful than before
+  * Dr. Seuss: a burst of possibility, rhyming celebration of what just happened, "Oh the things you have done!"
+  * Oliver Jeffers (Lost and Found): quiet emotional resolution, two characters together, bittersweet warmth
+  * Arnold Lobel (Frog and Toad): small domestic joy, friendship affirmed, cozy and content
+  * Eric Carle (Very Hungry Caterpillar): transformation complete, a new beginning, simple and profound
+  Endings should feel EARNED and EMOTIONAL. They can include sleep/rest if it feels natural — but also consider: a hug, a laugh together, watching the stars, heading home satisfied, a promise of tomorrow's adventure, quiet wonder at what just happened.`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
 
@@ -140,34 +147,7 @@ RULES:
   return JSON.parse(match[0]);
 }
 
-// Post-process: replace sleep words on final page
-function cleanFinalPage(pages) {
-  const sleepWords = ['sleeps','sleeping','slept','sleep','bedtime','bed','tired','yawn','yawning','yawns','dreams','dreaming','dreamed','drifts off','drifted','snooze','drowsy','night-night','nighty','eyes close','eyes closed','closes her eyes','closes his eyes'];
-  const replacements = {
-    'sleeps': 'smiles', 'sleeping': 'smiling', 'slept': 'smiled',
-    'sleep': 'smile', 'bedtime': 'story time', 'bed': 'home',
-    'tired': 'happy', 'yawn': 'grin', 'yawning': 'grinning', 'yawns': 'grins',
-    'dreams': 'smiles', 'dreaming': 'smiling', 'dreamed': 'smiled',
-    'drifts off': 'heads home', 'drifted': 'smiled',
-    'snooze': 'rest', 'drowsy': 'happy', 'night-night': 'goodbye',
-    'nighty': 'goodbye', 'eyes close': 'heart glows', 'eyes closed': 'heart full',
-    'closes her eyes': 'takes a deep breath', 'closes his eyes': 'takes a deep breath',
-  };
-  const lastPage = pages[pages.length - 1];
-  lastPage.lines = lastPage.lines.map(line => {
-    let cleaned = line;
-    sleepWords.forEach(word => {
-      const regex = new RegExp(word, 'gi');
-      if (regex.test(cleaned)) {
-        const replacement = replacements[word.toLowerCase()] || 'smiles';
-        cleaned = cleaned.replace(regex, replacement);
-        console.log(`Replaced "${word}" with "${replacement}" on final page`);
-      }
-    });
-    return cleaned;
-  });
-  return pages;
-}
+
 
 async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
@@ -259,7 +239,7 @@ app.post("/generate-full-story", async (req, res) => {
         episode,
         storySummary: storyData.storySummary,
         characters: storyData.characters,
-        pages: cleanedPages
+        pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
       }
     });
   } catch (e) {
