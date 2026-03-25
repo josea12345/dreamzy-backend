@@ -150,7 +150,7 @@ RULES:
 
 
 // Regenerate final page with a better ending
-async function improveEnding(finalPage, childName, theme, ageNum) {
+function improveEnding(finalPage, childName, theme, ageNum) {
   const endingStyles = [
     `A warm hug and a shared laugh between ${childName} and their friend`,
     `${childName} looks up at the stars, heart full of wonder`,
@@ -255,7 +255,7 @@ app.post("/generate-full-story", async (req, res) => {
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null);
     // Improve the final page ending
-    storyData.pages[storyData.pages.length - 1] = await improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
+    storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
