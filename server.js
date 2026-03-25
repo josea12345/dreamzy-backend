@@ -165,7 +165,10 @@ function improveEnding(finalPage, childName) {
   ];
   const picked = endings[Math.floor(Math.random() * endings.length)];
   console.log("Ending applied:", picked[0]);
-  return { ...finalPage, lines: picked };
+  // Force replace ALL lines — don't spread original page lines
+  const result = Object.assign({}, finalPage);
+  result.lines = picked;
+  return result;
 }
 
 
