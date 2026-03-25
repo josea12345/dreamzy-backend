@@ -150,56 +150,24 @@ RULES:
 
 
 // Regenerate final page with a better ending
-function improveEnding(finalPage, childName, theme, ageNum) {
-  const endingStyles = [
-    `A warm hug and a shared laugh between ${childName} and their friend`,
-    `${childName} looks up at the stars, heart full of wonder`,
-    `${childName} heads home as the sun sets, smiling at the adventure`,
-    `${childName} and a friend sit quietly together, happy and content`,
-    `${childName} discovers something magical and gasps with delight`,
-    `Everyone cheers for ${childName} — the adventure was a success!`,
-    `${childName} makes a promise: "We'll do this again tomorrow!"`,
-    `The world feels bigger and more magical than before`,
-    `${childName} takes a deep breath of the evening air, perfectly happy`,
-    `A moment of quiet wonder — ${childName} smiles at what they've done`,
+function improveEnding(finalPage, childName) {
+  const endings = [
+    [`${childName} laughs and cheers — what an adventure!`, `Let us do it again! ${childName} says with a grin.`],
+    [`The sun paints the sky gold and pink.`, `${childName} smiles — today was absolutely perfect.`],
+    [`${childName} hugs their new friend so tight.`, `Some days are pure magic. This was one.`],
+    [`Best adventure EVER! ${childName} grins wide.`, `Tomorrow holds even more wonders to find.`],
+    [`${childName} looks up at the first twinkling star.`, `Heart full and happy, the world feels wonderful.`],
+    [`Hand in hand, they skip toward home.`, `${childName} cannot wait to come back.`],
+    [`A big warm hug ends the perfect day.`, `${childName} smiles from ear to ear.`],
+    [`We did it! ${childName} shouts with joy.`, `The whole world heard and cheered along.`],
+    [`${childName} takes a deep breath of evening air.`, `Everything feels just right in the whole wide world.`],
+    [`Stars begin to appear one by one.`, `${childName} whispers: What a day. What a day.`],
   ];
-  const randomEnding = endingStyles[Math.floor(Math.random() * endingStyles.length)];
-  
-  try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 200,
-      system: `You are a children's book author. Rewrite these final page lines to match this ending feeling: "${randomEnding}". Keep the same age-appropriate language and style. Keep exactly the same number of lines. Return ONLY the new lines as a JSON array, nothing else. Example: ["Line one.", "Line two."]`,
-      messages: [{ role: "user", content: `Original lines: ${JSON.stringify(finalPage.lines)}
-Child's name: ${childName}
-Theme: ${theme}
-Age: ${ageNum}` }],
-    });
-    const text = response.content.map(b => b.text || "").join("");
-    const match = text.match(/\[[\s\S]*\]/);
-    if (match) {
-      const newLines = JSON.parse(match[0]);
-      console.log("Ending improved:", newLines);
-      return { ...finalPage, lines: newLines };
-    }
-  } catch(e) {
-    console.error("Ending improvement failed:", e.message);
-  }
-
-  // Hardcoded fallback — replace final page lines with a non-sleep ending
-  const fallbackEndings = [
-    [`${childName} laughs and cheers — what an adventure!`, `"Let's do it again!" ${childName} says.`],
-    [`The sun dips low, painting the sky gold.`, `${childName} smiles — a perfect day.`],
-    [`${childName} hugs their new friend tight.`, `Some days are magic. This was one.`],
-    [`"Best adventure ever!" ${childName} grins.`, `Tomorrow holds even more to explore.`],
-    [`${childName} looks up at the twinkling stars.`, `Heart full, the world feels wonderful.`],
-    [`Hand in hand, they walk toward home.`, `${childName} can't wait to come back.`],
-    [`A big warm hug — the day is done.`, `${childName} smiles from ear to ear.`],
-  ];
-  const fallback = fallbackEndings[Math.floor(Math.random() * fallbackEndings.length)];
-  console.log("Using fallback ending:", fallback);
-  return { ...finalPage, lines: fallback };
+  const picked = endings[Math.floor(Math.random() * endings.length)];
+  console.log("Ending applied:", picked[0]);
+  return { ...finalPage, lines: picked };
 }
+
 
 async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
