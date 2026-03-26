@@ -326,10 +326,11 @@ app.post("/generate-full-story", async (req, res) => {
         age: ageNum, created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24*60*60*1000).toISOString(),
         status: "generating", progress: 0, pages: []
-      }).catch(e => console.error("Gen insert failed:", e.message));
+      });
+      // ignore insert errors
     }
     const updateProgress = async (progress, status) => {
-      if (req.body.userId) await supabase.from("generations").update({ progress, status }).eq("id", genId).catch(()=>{});
+      if (req.body.userId) { try { await supabase.from("generations").update({ progress, status }).eq("id", genId); } catch(e) {} }
     };
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
