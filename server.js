@@ -199,18 +199,28 @@ async function generateImage(prompt, characterDescription, style, attempt) {
   }
 }
 
-async function generateVoice(text, ageNum) {
+async function generateVoice(text, ageNum, attempt) {
+  if (attempt === undefined) attempt = 0;
   const voiceSettings = ageNum <= 3
     ? { stability: 0.80, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
     : ageNum <= 5
     ? { stability: 0.65, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true }
     : { stability: 0.55, similarity_boost: 0.80, style: 0.35, use_speaker_boost: true };
-  const r = await axios.post(
-    "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
-    { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings },
-    { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
-  );
-  return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
+  try {
+    const r = await axios.post(
+      "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+      { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings },
+      { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
+    );
+    return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
+  } catch(e) {
+    if (attempt < 3) {
+      console.log("Voice failed, retrying in 3s... (attempt " + (attempt+1) + ")");
+      await sleep(3000);
+      return generateVoice(text, ageNum, attempt + 1);
+    }
+    throw e;
+  }
 }
 
 app.post("/generate-full-story", async (req, res) => {
@@ -238,15 +248,17 @@ app.post("/generate-full-story", async (req, res) => {
     );
 
     console.log("Generating narration...");
-    const audioUrls = await Promise.all(
-      storyData.pages.map(async (page, i) => {
-        try {
-          const url = await generateVoice(page.lines.join(" "), ageNum);
-          console.log("  Voice " + (i+1) + " done");
-          return url;
-        } catch (e) { console.error("  Voice " + (i+1) + " failed:", e.message); return null; }
-      })
-    );
+    const audioUrls = [];
+    for (let i = 0; i < storyData.pages.length; i++) {
+      try {
+        const url = await generateVoice(storyData.pages[i].lines.join(" "), ageNum);
+        console.log("  Voice " + (i+1) + "/" + storyData.pages.length + " done");
+        audioUrls.push(url);
+      } catch (e) {
+        console.error("  Voice " + (i+1) + " failed:", e.message);
+        audioUrls.push(null);
+      }
+    }
 
     const seriesId = previousStory?.series_id || (childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now());
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
