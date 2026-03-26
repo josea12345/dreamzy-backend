@@ -20,7 +20,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "stories-v4" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -100,21 +100,21 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options);
   } catch (e) {
     if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt + 1);
     }
     throw e;
   }
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -154,22 +154,15 @@ Return ONLY valid JSON:
 }
 RULES:
 - Generate exactly ${ageStyle.pages} pages
-- Use ${childName}'s name at least once per page
-- Weave in these interests as CENTRAL to the plot: ${interestList}
-- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON/MORALEJA: Weave this lesson naturally into the story: "${lesson}". The lesson should emerge organically through the character's journey, not be stated directly.` : ""}
-- CRITICAL: Every illustrationPrompt MUST start with the exact characterDescription verbatim, then describe the scene. This ensures visual consistency across all pages. Example: "Young girl with curly red hair, green eyes, yellow raincoat — she is running through a magical forest..."
-- Use the SAME character appearance in EVERY page illustration — same hair, same clothes, same features
-- storySummary MUST capture key events and characters for future episodes
-- FINAL PAGE ENDINGS — draw inspiration from these master authors and vary each story:
-  * Margaret Wise Brown (Goodnight Moon): poetic, atmospheric, acknowledge the world around them ("the quiet old lady whispering hush")
-  * Mo Willems (Elephant & Piggie): warm friendship moment, a simple shared joy, dialogue that lands with a smile
-  * Julia Donaldson (Gruffalo): a clever twist reveal, the hero realizes their own power, triumphant but humble
-  * Roald Dahl: a touch of magic or mischief lingers, the world feels a little more wonderful than before
-  * Dr. Seuss: a burst of possibility, rhyming celebration of what just happened, "Oh the things you have done!"
-  * Oliver Jeffers (Lost and Found): quiet emotional resolution, two characters together, bittersweet warmth
-  * Arnold Lobel (Frog and Toad): small domestic joy, friendship affirmed, cozy and content
-  * Eric Carle (Very Hungry Caterpillar): transformation complete, a new beginning, simple and profound
-  Endings should feel EARNED and EMOTIONAL. They can include sleep/rest if it feels natural — but also consider: a hug, a laugh together, watching the stars, heading home satisfied, a promise of tomorrow's adventure, quiet wonder at what just happened.`,
+- Use ${childName}'s name naturally — not on every single line, just when it feels right
+- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in. A story about dogs and space is fine. A story that mentions dogs, space, pizza, and robots on every page is not."}
+- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON: Weave "${lesson}" into the story organically — through what happens, not through characters saying it out loud.` : ""}
+- NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible". Use simple direct language. Show don't tell.
+- EVERY sentence must sound natural when read aloud to a child. If it sounds like a school essay, rewrite it.
+- CRITICAL: Every illustrationPrompt MUST start with the exact characterDescription verbatim, then describe the scene.
+- Use the SAME character appearance in EVERY page — same hair, clothes, features.
+- storySummary MUST capture key events and characters for future episodes.
+- FINAL PAGE: End with a warm, earned emotional moment. Vary the style — a hug, a laugh, heading home satisfied, quiet wonder, a promise of tomorrow. NOT sleep unless it feels completely natural.`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
 
@@ -311,7 +304,7 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount });
     // Improve the final page ending
     storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
