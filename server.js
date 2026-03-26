@@ -18,6 +18,7 @@ app.use(express.json({ limit: "50mb" }));
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "progress-v2" }));
@@ -319,7 +320,7 @@ app.post("/generate-full-story", async (req, res) => {
 
     const genId = (childName||customHero||"story").toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Date.now();
     if (req.body.userId) {
-      const { error: genError } = await supabase.from("generations").insert({
+      const { error: genError } = await supabaseAdmin.from("generations").insert({
         id: genId, user_id: req.body.userId,
         title: customHero ? "A story with " + customHero : (childName || "story") + "'s story",
         child_name: childName || customHero || "story",
@@ -331,7 +332,7 @@ app.post("/generate-full-story", async (req, res) => {
       else console.log("Generation record created:", genId);
     }
     const updateProgress = async (progress, status) => {
-      if (req.body.userId) { try { await supabase.from("generations").update({ progress, status }).eq("id", genId); } catch(e) {} }
+      if (req.body.userId) { try { await supabaseAdmin.from("generations").update({ progress, status }).eq("id", genId); } catch(e) {} }
     };
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
@@ -411,7 +412,7 @@ app.post("/generate-full-story", async (req, res) => {
     // Update generation record with completed story
     if (req.body.userId) {
       try {
-        await supabase.from("generations").update({
+        await supabaseAdmin.from("generations").update({
           title: storyData.title,
           child_name: childName || customHero || "story",
           status: "complete",
