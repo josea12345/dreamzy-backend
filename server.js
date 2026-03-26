@@ -294,6 +294,14 @@ app.post("/generate-full-story", async (req, res) => {
     try { coverImageUrl = await generateImage(coverPrompt, storyData.characterDescription, imgStyle); }
     catch(e) { console.error("  Cover image failed:", e.message); }
 
+    // Generate cover narration
+    let coverAudioUrl = null;
+    try {
+      const coverText = `${storyData.title}. A story for ${childName}.`;
+      const coverAudio = await generateVoice(coverText, ageNum);
+      coverAudioUrl = coverAudio?.audioUrl || coverAudio || null;
+    } catch(e) { console.error("  Cover audio failed:", e.message); }
+
     const imageUrls = await Promise.all(
       storyData.pages.map(async (page, i) => {
         console.log("  Image " + (i+1) + "/" + storyData.pages.length + "...");
@@ -329,7 +337,7 @@ app.post("/generate-full-story", async (req, res) => {
         storySummary: storyData.storySummary,
         characters: storyData.characters,
         pages: [
-          { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: null },
+          { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: coverAudioUrl },
           ...storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
         ]
       }
