@@ -20,7 +20,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "email-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -231,7 +231,7 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
             
             <!-- Logo -->
             <div style="text-align:center;margin-bottom:32px;">
-              <img src="https://dreamzy.xyz/logo.png" width="80" height="80" alt="Dreamzy" style="display:inline-block;"/>
+              <span style="font-size:48px;">📖</span>
               <div style="font-size:28px;font-weight:700;color:white;margin-top:8px;">
                 Dream<span style="color:#f4a87a">zy</span>
               </div>
@@ -287,6 +287,13 @@ app.post("/generate-full-story", async (req, res) => {
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
+    // Generate cover image first
+    const coverPrompt = `A beautiful storybook cover illustration for a children's book titled "${storyData.title}". The main character is ${storyData.characterDescription || childName}. Magical, warm, inviting cover art with the feeling of a classic picture book. Centered composition, rich colors, whimsical atmosphere.`;
+    console.log("  Cover image...");
+    let coverImageUrl = null;
+    try { coverImageUrl = await generateImage(coverPrompt, storyData.characterDescription, imgStyle); }
+    catch(e) { console.error("  Cover image failed:", e.message); }
+
     const imageUrls = await Promise.all(
       storyData.pages.map(async (page, i) => {
         console.log("  Image " + (i+1) + "/" + storyData.pages.length + "...");
@@ -310,10 +317,6 @@ app.post("/generate-full-story", async (req, res) => {
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
 
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
-    console.log("Email check - userEmail:", req.body.userEmail, "userId:", req.body.userId);
-    if (req.body.userEmail) {
-      sendStoryEmail(req.body.userEmail, childName, storyData.title, process.env.FRONTEND_URL);
-    }
     res.json({
       story: {
         title: storyData.title,
@@ -325,7 +328,10 @@ app.post("/generate-full-story", async (req, res) => {
         episode,
         storySummary: storyData.storySummary,
         characters: storyData.characters,
-        pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
+        pages: [
+          { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: null },
+          ...storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
+        ]
       }
     });
   } catch (e) {
