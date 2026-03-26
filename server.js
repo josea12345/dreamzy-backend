@@ -100,21 +100,21 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options);
   } catch (e) {
     if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt + 1);
     }
     throw e;
   }
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -144,7 +144,7 @@ Return ONLY valid JSON:
 {
   "title": "Catchy episode title featuring ${childName}",
   "ageRange": "${ageStyle.range}",
-  "characterDescription": "Detailed locked character description for ${childName}: hair color and style, eye color, skin tone, clothing colors, any distinctive features. Be VERY specific so every illustration looks like the same child. Example: young girl with curly red hair, green eyes, light brown skin, wearing a yellow raincoat and purple boots",
+  "characterDescription": "${appearance ? `${childName}: ${appearance}` : `Detailed locked character description for ${childName}: hair color and style, eye color, skin tone, clothing colors, any distinctive features. Be VERY specific so every illustration looks like the same child.`}",
   "storySummary": "2-3 sentence summary of what happened in this story — used for future episode context",
   "characters": {
     "protagonist": "${childName} description",
@@ -295,7 +295,7 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   console.log("Using illustration style:", imgStyle);
   if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
@@ -304,7 +304,18 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount });
+    // Override characterDescription with parent-provided appearance if available
+    if (appearance && appearance.trim()) {
+      storyData.characterDescription = `${childName}: ${appearance.trim()}`;
+      // Inject into all illustration prompts
+      storyData.pages = storyData.pages.map(p => ({
+        ...p,
+        illustrationPrompt: `${storyData.characterDescription} — ${p.illustrationPrompt}`
+      }));
+      console.log("Using parent appearance:", storyData.characterDescription);
+    }
+
     // Improve the final page ending
     storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
