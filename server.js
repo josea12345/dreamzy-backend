@@ -18,7 +18,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "share-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -364,6 +364,110 @@ app.get("/share/:shareId", async (req, res) => {
     res.json({ story: data });
   } catch (e) {
     console.error("Share fetch error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── PDF Export ───────────────────────────────────────────────────────────────
+app.post("/generate-pdf", async (req, res) => {
+  const { story } = req.body;
+  if (!story) return res.status(400).json({ error: "Missing story" });
+  try {
+    const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
+    const fetch = (await import("node-fetch")).default;
+
+    const pdfDoc = await PDFDocument.create();
+    const titleFont = await pdfDoc.embedFont(StandardFonts.TimesRomanBoldItalic);
+    const bodyFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+    const pageWidth = 612, pageHeight = 792;
+    const margin = 48;
+    const purple = rgb(0.49, 0.23, 0.93);
+    const dark = rgb(0.1, 0.05, 0.2);
+
+    // Cover page
+    const cover = pdfDoc.addPage([pageWidth, pageHeight]);
+    cover.drawRectangle({ x:0, y:0, width:pageWidth, height:pageHeight, color: rgb(0.05, 0.04, 0.12) });
+    cover.drawRectangle({ x:0, y:0, width:pageWidth, height:8, color: purple });
+    cover.drawRectangle({ x:0, y:pageHeight-8, width:pageWidth, height:8, color: purple });
+    const titleSize = 42;
+    const titleText = story.title || "A Dreamzy Story";
+    cover.drawText(titleText, { x: margin, y: pageHeight/2 + 60, size: titleSize, font: titleFont, color: rgb(1,1,1), maxWidth: pageWidth - margin*2 });
+    cover.drawText(`A story for ${story.childName}`, { x: margin, y: pageHeight/2 - 10, size: 22, font: bodyFont, color: rgb(0.68, 0.55, 1) });
+    cover.drawText(`Made with Dreamzy ✦`, { x: margin, y: margin, size: 12, font: bodyFont, color: rgb(0.4, 0.35, 0.55) });
+
+    // Story pages
+    for (let i = 0; i < story.pages.length; i++) {
+      const page = story.pages[i];
+      const p = pdfDoc.addPage([pageWidth, pageHeight]);
+
+      // Background
+      p.drawRectangle({ x:0, y:0, width:pageWidth, height:pageHeight, color: rgb(0.99, 0.97, 1) });
+
+      // Purple top bar
+      p.drawRectangle({ x:0, y:pageHeight-6, width:pageWidth, height:6, color: purple });
+
+      // Image — top half
+      const imgHeight = 340;
+      if (page.imageUrl) {
+        try {
+          let imgData;
+          if (page.imageUrl.startsWith("data:image")) {
+            const base64 = page.imageUrl.split(",")[1];
+            imgData = Buffer.from(base64, "base64");
+          } else {
+            const r = await fetch(page.imageUrl);
+            imgData = Buffer.from(await r.arrayBuffer());
+          }
+          const embedded = page.imageUrl.includes("png") || page.imageUrl.includes("data:image/png")
+            ? await pdfDoc.embedPng(imgData).catch(() => pdfDoc.embedJpg(imgData))
+            : await pdfDoc.embedJpg(imgData).catch(() => pdfDoc.embedPng(imgData));
+          const imgY = pageHeight - imgHeight - 24;
+          p.drawImage(embedded, { x: margin, y: imgY, width: pageWidth - margin*2, height: imgHeight - 24 });
+        } catch(e) { console.log("Image embed failed:", e.message); }
+      }
+
+      // Divider
+      const divY = pageHeight - imgHeight - 32;
+      p.drawLine({ start: {x: margin, y: divY}, end: {x: pageWidth - margin, y: divY}, thickness: 1, color: rgb(0.8, 0.75, 0.95) });
+
+      // Story text
+      const lines = page.lines || [];
+      const text = lines.join(" ");
+      const fontSize = 16;
+      const lineHeight = fontSize * 1.6;
+      const maxWidth = pageWidth - margin * 2;
+      // Word wrap
+      const words = text.split(" ");
+      const wrappedLines = [];
+      let currentLine = "";
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const w = bodyFont.widthOfTextAtSize(testLine, fontSize);
+        if (w > maxWidth && currentLine) { wrappedLines.push(currentLine); currentLine = word; }
+        else currentLine = testLine;
+      }
+      if (currentLine) wrappedLines.push(currentLine);
+
+      let textY = divY - 28;
+      for (const line of wrappedLines) {
+        if (textY < margin + 40) break;
+        p.drawText(line, { x: margin, y: textY, size: fontSize, font: bodyFont, color: dark });
+        textY -= lineHeight;
+      }
+
+      // Page number
+      p.drawText(`${i + 1}`, { x: pageWidth/2 - 6, y: margin - 10, size: 11, font: bodyFont, color: rgb(0.6, 0.55, 0.75) });
+      // Purple bottom bar
+      p.drawRectangle({ x:0, y:0, width:pageWidth, height:6, color: purple });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="dreamzy-${(story.title||"story").replace(/[^a-z0-9]/gi,"-").toLowerCase()}.pdf"`);
+    res.send(Buffer.from(pdfBytes));
+    console.log("PDF generated:", story.title);
+  } catch(e) {
+    console.error("PDF error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
