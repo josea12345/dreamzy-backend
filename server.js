@@ -310,14 +310,14 @@ app.post("/generate-full-story", async (req, res) => {
   const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   console.log("Using illustration style:", imgStyle);
-  if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
-  if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
+  if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
   const ageNum = parseInt(age) || 5;
   try {
     const isContinuation = !!previousStory;
-    console.log("Generating story for " + (childName||customHero||"unknown") + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
+    console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
+    await updateProgress(15, "generating");
     // Override characterDescription with parent-provided appearance if available
     if (appearance && appearance.trim()) {
       storyData.characterDescription = `${childName}: ${appearance.trim()}`;
@@ -334,6 +334,7 @@ app.post("/generate-full-story", async (req, res) => {
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
+    await updateProgress(20, "illustrating");
     // Generate cover image first
     const coverPrompt = `A beautiful storybook cover illustration for a children's book titled "${storyData.title}". The main character is ${storyData.characterDescription || childName}. Magical, warm, inviting cover art with the feeling of a classic picture book. Centered composition, rich colors, whimsical atmosphere.`;
     console.log("  Cover image...");
@@ -367,6 +368,7 @@ app.post("/generate-full-story", async (req, res) => {
     }
 
     console.log("Generating narration...");
+    await updateProgress(70, "narrating");
     const audioUrls = [];
     for (let i = 0; i < storyData.pages.length; i++) {
       let result = null;
@@ -388,23 +390,18 @@ app.post("/generate-full-story", async (req, res) => {
 
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
 
-    // Save to generations table (24hr retention)
+    // Update generation record with completed story
     if (req.body.userId) {
       try {
-        const genId = childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now();
-        await supabase.from("generations").insert({
-          id: genId,
-          user_id: req.body.userId,
+        await supabase.from("generations").update({
           title: storyData.title,
-          child_name: childName,
-          age: ageNum,
-          created_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          child_name: childName || customHero || "story",
           status: "complete",
+          progress: 100,
           pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: null }))
-        });
-        console.log("Generation saved:", genId);
-      } catch(e) { console.error("Generation save failed:", e.message); }
+        }).eq("id", genId);
+        console.log("Generation complete:", genId);
+      } catch(e) { console.error("Generation update failed:", e.message); }
     }
     if (req.body.userEmail) {
       sendStoryEmail(req.body.userEmail, childName, storyData.title, process.env.FRONTEND_URL);
