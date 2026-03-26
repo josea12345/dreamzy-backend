@@ -127,7 +127,7 @@ RULES:
 - Generate exactly ${ageStyle.pages} pages
 - Use ${childName}'s name at least once per page
 - Weave in these interests as CENTRAL to the plot: ${interestList}
-- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
+- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON/MORALEJA: Weave this lesson naturally into the story: "${lesson}". The lesson should emerge organically through the character's journey, not be stated directly.` : ""}
 - CRITICAL: Every illustrationPrompt MUST start with the exact characterDescription verbatim, then describe the scene. This ensures visual consistency across all pages. Example: "Young girl with curly red hair, green eyes, yellow raincoat — she is running through a magical forest..."
 - Use the SAME character appearance in EVERY page illustration — same hair, same clothes, same features
 - storySummary MUST capture key events and characters for future episodes
@@ -273,7 +273,7 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   console.log("Using illustration style:", imgStyle);
   if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
