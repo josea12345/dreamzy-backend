@@ -20,7 +20,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "appear-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -100,21 +100,21 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options);
   } catch (e) {
     if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt + 1);
     }
     throw e;
   }
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -159,8 +159,14 @@ RULES:
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON: Weave "${lesson}" into the story organically — through what happens, not through characters saying it out loud.` : ""}
 - NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible". Use simple direct language. Show don't tell.
 - EVERY sentence must sound natural when read aloud to a child. If it sounds like a school essay, rewrite it.
-- CRITICAL: Every illustrationPrompt MUST start with the exact characterDescription verbatim, then describe the scene.
-- Use the SAME character appearance in EVERY page — same hair, clothes, features.
+- ILLUSTRATION PROMPTS — this is critical for visual consistency:
+  * Every illustrationPrompt MUST follow this exact format: "[CHARACTER DESCRIPTION] is [DOING WHAT] in/at [SPECIFIC LOCATION]. [SUPPORTING CHARACTERS if any]. [MOOD/LIGHTING]. [KEY VISUAL DETAILS]."
+  * Example: "A girl with curly red hair, green eyes, yellow raincoat is climbing a giant mushroom in an enchanted forest. A small blue rabbit watches from below. Warm golden light. Magical and whimsical."
+  * Be SPECIFIC about the action — not "standing in a forest" but "running through tall purple mushrooms, arms outstretched"
+  * Include the EXACT setting from that page's story — each page should show a DIFFERENT scene
+  * Describe the EMOTION on the character's face — surprised, delighted, determined, curious
+  * Always include lighting/atmosphere: warm sunset, cozy candlelight, bright sunny meadow, misty morning
+  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.
 - storySummary MUST capture key events and characters for future episodes.
 - FINAL PAGE: End with a warm, earned emotional moment. Vary the style — a hug, a laugh, heading home satisfied, quiet wonder, a promise of tomorrow. NOT sleep unless it feels completely natural.`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
@@ -200,7 +206,13 @@ async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
   try {
-    const fullPrompt = stylePrompt + " Scene: " + prompt + ". Character appearance: " + characterDescription + ". Child-friendly. No text or words in the image.";
+    const fullPrompt = stylePrompt + 
+      " ILLUSTRATION FOR A CHILDREN'S BOOK PAGE. " +
+      "The main character: " + characterDescription + ". " +
+      "Scene: " + prompt + ". " +
+      "IMPORTANT: Draw exactly what is described. Show the character actively doing the action described. " +
+      "Keep the same character appearance as described. Child-friendly illustration. No text, letters, or words anywhere in the image. " +
+      "Full color. Clear focal point. Expressive faces.";
     const response = await axios.post(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" + process.env.GEMINI_KEY,
       {
@@ -304,7 +316,7 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount });
     // Override characterDescription with parent-provided appearance if available
     if (appearance && appearance.trim()) {
       storyData.characterDescription = `${childName}: ${appearance.trim()}`;
