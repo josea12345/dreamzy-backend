@@ -220,7 +220,7 @@ async function generateVoice(text, ageNum) {
 async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
   try {
     await resend.emails.send({
-      from: "Dreamzy <stories@dreamzy.xyz>",
+      from: "Dreamzy <hello@dreamzy.xyz>",
       to: email,
       subject: `${childName}'s story is ready! 📖`,
       html: `
