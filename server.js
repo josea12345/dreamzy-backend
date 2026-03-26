@@ -325,6 +325,49 @@ app.post("/webhook/lemonsqueezy", async (req, res) => {
   res.status(200).json({ received: true });
 });
 
+// ── Share story ──────────────────────────────────────────────────────────────
+app.post("/share-story", async (req, res) => {
+  const { story, userId } = req.body;
+  if (!story || !userId) return res.status(400).json({ error: "Missing story or userId" });
+  try {
+    const shareId = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+    // Strip audio (large) but keep images as base64
+    const pages = story.pages.map(p => ({ ...p, audioUrl: null }));
+    const { error } = await supabase.from("shared_stories").insert({
+      id: shareId,
+      user_id: userId,
+      title: story.title,
+      child_name: story.childName || story.child_name,
+      age: story.age || 5,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      pages,
+    });
+    if (error) throw error;
+    console.log("Story shared:", shareId);
+    res.json({ shareId, url: `${process.env.FRONTEND_URL || "https://dreamzy.xyz"}/share/${shareId}` });
+  } catch (e) {
+    console.error("Share error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/share/:shareId", async (req, res) => {
+  const { shareId } = req.params;
+  try {
+    const { data, error } = await supabase.from("shared_stories").select("*").eq("id", shareId).single();
+    if (error || !data) return res.status(404).json({ error: "Story not found or expired" });
+    // Check expiry
+    if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: "This story has expired" });
+    // Increment views
+    await supabase.from("shared_stories").update({ views: (data.views || 0) + 1 }).eq("id", shareId);
+    res.json({ story: data });
+  } catch (e) {
+    console.error("Share fetch error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/checkout-urls", (req, res) => {
   res.json({
     familyMonthly: process.env.LEMONSQUEEZY_FAMILY_MONTHLY_URL,
