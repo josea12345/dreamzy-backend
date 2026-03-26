@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { Resend } from "resend";
+const resend = new Resend(process.env.RESEND_API_KEY);
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -211,6 +213,62 @@ async function generateVoice(text, ageNum) {
     { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
   );
   return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
+}
+
+// ── Email ────────────────────────────────────────────────────────────────────
+async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
+  try {
+    await resend.emails.send({
+      from: "Dreamzy <stories@dreamzy.xyz>",
+      to: email,
+      subject: `${childName}'s story is ready! 📖`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="margin:0;padding:0;background:#0d0a1e;font-family:'Helvetica Neue',Arial,sans-serif;">
+          <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+            
+            <!-- Logo -->
+            <div style="text-align:center;margin-bottom:32px;">
+              <span style="font-size:48px;">📖</span>
+              <div style="font-size:28px;font-weight:700;color:white;margin-top:8px;">
+                Dream<span style="color:#f4a87a">zy</span>
+              </div>
+            </div>
+
+            <!-- Card -->
+            <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;text-align:center;">
+              <div style="font-size:40px;margin-bottom:16px;">✨</div>
+              <h1 style="color:white;font-size:22px;margin:0 0 8px;font-weight:700;">
+                ${childName}'s story is ready!
+              </h1>
+              <p style="color:rgba(255,255,255,0.5);font-size:15px;margin:0 0 24px;line-height:1.6;">
+                <em style="color:rgba(255,255,255,0.8)">"${storyTitle}"</em><br/>
+                A personalized bedtime story, just for ${childName}.
+              </p>
+              <a href="${shareUrl || 'https://dreamzy.xyz'}" 
+                style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#D4845A,#C878C0,#8B5CF6);border-radius:16px;color:white;text-decoration:none;font-weight:700;font-size:16px;box-shadow:0 4px 20px rgba(212,132,90,0.4);">
+                ▶ Read the Story
+              </a>
+            </div>
+
+            <!-- Footer -->
+            <div style="text-align:center;margin-top:24px;">
+              <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;">
+                Made with ✨ by Dreamzy &nbsp;·&nbsp; 
+                <a href="https://dreamzy.xyz" style="color:rgba(255,255,255,0.3);">dreamzy.xyz</a>
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+    console.log("Story email sent to:", email);
+  } catch(e) {
+    console.error("Email failed:", e.message);
+  }
 }
 
 app.post("/generate-full-story", async (req, res) => {
