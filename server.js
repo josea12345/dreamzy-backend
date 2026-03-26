@@ -18,7 +18,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v7" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -32,9 +32,9 @@ const STYLE_PROMPTS = {
   wimmelbuch: "STYLE: wimmelbuch busy scene illustration. Packed with tiny detailed characters and objects everywhere. Top-down or isometric view. Every corner filled with activity. Like Where's Waldo. Bright colors. Lots of humor and hidden details. NO simple compositions.",
 };
 
-function getAgeStyle(age) {
+function getAgeStyle(age, pageCountOverride) {
   if (age <= 3) return {
-    range: "1-3", pages: 5,
+    range: "1-3", pages: pageCountOverride || 5,
     style: `STYLE: Ages 1-3 (Sandra Boynton / Margaret Wise Brown / Eric Carle style)
 - Lines: 1-2 SHORT lines per page. Max 6 words each.
 - LOTS of repetition — repeat phrases across pages like a refrain
@@ -46,7 +46,7 @@ function getAgeStyle(age) {
 - NEVER end with sleeping, yawning, or bedtime words`,
   };
   if (age <= 5) return {
-    range: "3-5", pages: 6,
+    range: "3-5", pages: pageCountOverride || 6,
     style: `STYLE: Ages 3-5 (Dr. Seuss / Julia Donaldson / Mo Willems style)
 - Lines: 2-3 lines per page. Max 8 words each. Playful and rhythmic.
 - Use rhyme where natural — AABB or ABAB patterns
@@ -57,7 +57,7 @@ function getAgeStyle(age) {
 - NEVER end with sleeping, yawning, or bedtime words`,
   };
   return {
-    range: "5-10", pages: 7,
+    range: "5-10", pages: pageCountOverride || 7,
     style: `STYLE: Ages 5-10 (Roald Dahl / Magic Tree House / Frog and Toad style)
 - Lines: 3-4 lines per page. Up to 12 words. Varied sentence length.
 - Strong narrative arc: setup → rising action → climax → resolution
@@ -69,24 +69,24 @@ function getAgeStyle(age) {
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options);
   } catch (e) {
     if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt + 1);
     }
     throw e;
   }
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
-  const ageStyle = getAgeStyle(ageNum);
+  const ageStyle = getAgeStyle(ageNum, options?.pageCount);
 
   const continuationContext = previousStory ? `
 IMPORTANT — THIS IS A CONTINUATION (Episode ${(previousStory.episode || 1) + 1}):
@@ -152,23 +152,22 @@ RULES:
 // Regenerate final page with a better ending
 function improveEnding(finalPage, childName) {
   const endings = [
-    [`${childName} laughs and cheers — what an adventure!`, `Let us do it again! ${childName} says with a grin.`],
+    [`${childName} laughs and cheers — what an adventure!`, `"Let's do it again!" ${childName} says with a grin.`],
     [`The sun paints the sky gold and pink.`, `${childName} smiles — today was absolutely perfect.`],
     [`${childName} hugs their new friend so tight.`, `Some days are pure magic. This was one.`],
-    [`Best adventure EVER! ${childName} grins wide.`, `Tomorrow holds even more wonders to find.`],
+    [`"Best adventure EVER!" ${childName} grins wide.`, `Tomorrow holds even more wonders to find.`],
     [`${childName} looks up at the first twinkling star.`, `Heart full and happy, the world feels wonderful.`],
     [`Hand in hand, they skip toward home.`, `${childName} cannot wait to come back.`],
     [`A big warm hug ends the perfect day.`, `${childName} smiles from ear to ear.`],
-    [`We did it! ${childName} shouts with joy.`, `The whole world heard and cheered along.`],
+    [`"We did it!" ${childName} shouts with joy.`, `The whole world heard — and cheered along.`],
     [`${childName} takes a deep breath of evening air.`, `Everything feels just right in the whole wide world.`],
-    [`Stars begin to appear one by one.`, `${childName} whispers: What a day. What a day.`],
+    [`The adventure is done, the story complete.`, `${childName} knows: the best is yet to come.`],
+    [`Stars begin to appear, one by one.`, `${childName} whispers: "What a day. What a day."`],
+    [`${childName} turns and waves one last goodbye.`, `Until next time, brave adventurer. Until next time.`],
   ];
   const picked = endings[Math.floor(Math.random() * endings.length)];
   console.log("Ending applied:", picked[0]);
-  // Force replace ALL lines — don't spread original page lines
-  const result = Object.assign({}, finalPage);
-  result.lines = picked;
-  return result;
+  return { ...finalPage, lines: picked };
 }
 
 
@@ -215,7 +214,7 @@ async function generateVoice(text, ageNum) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   console.log("Using illustration style:", imgStyle);
   if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
@@ -224,14 +223,9 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount });
     // Improve the final page ending
-    const improvedPage = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
-    storyData.pages[storyData.pages.length - 1] = improvedPage;
-    console.log("ENDING_CHECK:", JSON.stringify(improvedPage.lines));
-    // Fix illustration prompt AND soundNote for final page
-    storyData.pages[storyData.pages.length - 1].illustrationPrompt = `${childName} celebrating joyfully at the end of a great adventure, looking happy and triumphant. Warm golden sunset light. Big smile. Friends nearby cheering. Energetic and joyful scene. No sleeping, no bed, no closed eyes.`;
-    storyData.pages[storyData.pages.length - 1].soundNote = "warm, triumphant, joyful, upbeat";
+    storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
@@ -269,7 +263,7 @@ app.post("/generate-full-story", async (req, res) => {
         episode,
         storySummary: storyData.storySummary,
         characters: storyData.characters,
-        pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i], lines: p.lines }))
+        pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
       }
     });
   } catch (e) {
@@ -314,11 +308,17 @@ app.post("/webhook/lemonsqueezy", async (req, res) => {
   if (!customerEmail) return res.status(200).json({ received: true });
   try {
     if (eventName === "subscription_created" || (eventName === "subscription_updated" && status === "active")) {
-      await supabase.from("profiles").update({ subscription_status: "paid", lemon_squeezy_customer_id: payload.data?.attributes?.customer_id?.toString() }).eq("email", customerEmail);
-      console.log("Activated subscription for:", customerEmail);
+      const productName = payload.data?.attributes?.product_name || "";
+      const plan = productName.toLowerCase().includes("plus") ? "family_plus" : "family";
+      await supabase.from("profiles").update({ 
+        subscription_status: "paid", 
+        plan: plan,
+        lemon_squeezy_customer_id: payload.data?.attributes?.customer_id?.toString() 
+      }).eq("email", customerEmail);
+      console.log("Activated subscription for:", customerEmail, "plan:", plan);
     }
     if (eventName === "subscription_cancelled" || (eventName === "subscription_updated" && status === "cancelled")) {
-      await supabase.from("profiles").update({ subscription_status: "free" }).eq("email", customerEmail);
+      await supabase.from("profiles").update({ subscription_status: "free", plan: "free" }).eq("email", customerEmail);
       console.log("Cancelled subscription for:", customerEmail);
     }
   } catch (e) { console.error("Webhook error:", e.message); }
@@ -327,8 +327,10 @@ app.post("/webhook/lemonsqueezy", async (req, res) => {
 
 app.get("/checkout-urls", (req, res) => {
   res.json({
-    monthly: process.env.LEMONSQUEEZY_MONTHLY_URL,
-    yearly: process.env.LEMONSQUEEZY_YEARLY_URL,
+    familyMonthly: process.env.LEMONSQUEEZY_FAMILY_MONTHLY_URL,
+    familyYearly: process.env.LEMONSQUEEZY_FAMILY_YEARLY_URL,
+    familyPlusMonthly: process.env.LEMONSQUEEZY_FAMILYPLUS_MONTHLY_URL,
+    familyPlusYearly: process.env.LEMONSQUEEZY_FAMILYPLUS_YEARLY_URL,
   });
 });
 
