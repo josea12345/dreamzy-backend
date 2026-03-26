@@ -310,6 +310,10 @@ app.post("/generate-full-story", async (req, res) => {
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
 
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
+    console.log("Email check - userEmail:", req.body.userEmail, "userId:", req.body.userId);
+    if (req.body.userEmail) {
+      sendStoryEmail(req.body.userEmail, childName, storyData.title, process.env.FRONTEND_URL);
+    }
     res.json({
       story: {
         title: storyData.title,
