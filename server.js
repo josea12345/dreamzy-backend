@@ -386,6 +386,25 @@ app.post("/generate-full-story", async (req, res) => {
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
 
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
+
+    // Save to generations table (24hr retention)
+    if (req.body.userId) {
+      try {
+        const genId = childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now();
+        await supabase.from("generations").insert({
+          id: genId,
+          user_id: req.body.userId,
+          title: storyData.title,
+          child_name: childName,
+          age: ageNum,
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          status: "complete",
+          pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: null }))
+        });
+        console.log("Generation saved:", genId);
+      } catch(e) { console.error("Generation save failed:", e.message); }
+    }
     if (req.body.userEmail) {
       sendStoryEmail(req.body.userEmail, childName, storyData.title, process.env.FRONTEND_URL);
     }
