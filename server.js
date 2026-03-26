@@ -231,7 +231,7 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
             
             <!-- Logo -->
             <div style="text-align:center;margin-bottom:32px;">
-              <span style="font-size:48px;">📖</span>
+              <img src="https://dreamzy.xyz/logo.png" width="80" height="80" alt="Dreamzy" style="display:inline-block;"/>
               <div style="font-size:28px;font-weight:700;color:white;margin-top:8px;">
                 Dream<span style="color:#f4a87a">zy</span>
               </div>
