@@ -20,7 +20,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "cover-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -302,33 +302,44 @@ app.post("/generate-full-story", async (req, res) => {
       coverAudioUrl = coverAudio?.audioUrl || coverAudio || null;
     } catch(e) { console.error("  Cover audio failed:", e.message); }
 
-    const imageUrls = await Promise.all(
-      storyData.pages.map(async (page, i) => {
-        console.log("  Image " + (i+1) + "/" + storyData.pages.length + "...");
-        try { return await generateImage(page.illustrationPrompt, storyData.characterDescription, imgStyle); }
-        catch (e) { console.error("  Image " + (i+1) + " failed:", e.message); return null; }
-      })
-    );
+    // Sequential image generation — more reliable for long stories
+    const imageUrls = [];
+    for (let i = 0; i < storyData.pages.length; i++) {
+      console.log("  Image " + (i+1) + "/" + storyData.pages.length + "...");
+      let url = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          url = await generateImage(storyData.pages[i].illustrationPrompt, storyData.characterDescription, imgStyle);
+          break;
+        } catch(e) {
+          console.error("  Image " + (i+1) + " attempt " + (attempt+1) + " failed:", e.message);
+          if (attempt < 2) await sleep(2000);
+        }
+      }
+      imageUrls.push(url);
+    }
 
     console.log("Generating narration...");
-    const audioUrls = await Promise.all(
-      storyData.pages.map(async (page, i) => {
+    const audioUrls = [];
+    for (let i = 0; i < storyData.pages.length; i++) {
+      let result = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const url = await generateVoice(page.lines.join(" "), ageNum);
-          console.log("  Voice " + (i+1) + " done");
-          return url;
-        } catch (e) { console.error("  Voice " + (i+1) + " failed:", e.message); return null; }
-      })
-    );
+          result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum);
+          console.log("  Voice " + (i+1) + "/" + storyData.pages.length + " done");
+          break;
+        } catch(e) {
+          console.error("  Voice " + (i+1) + " attempt " + (attempt+1) + " failed:", e.message);
+          if (attempt < 2) await sleep(2000);
+        }
+      }
+      audioUrls.push(result);
+    }
 
     const seriesId = previousStory?.series_id || (childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now());
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
 
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
-    console.log("Email check - userEmail:", req.body.userEmail);
-    if (req.body.userEmail) {
-      sendStoryEmail(req.body.userEmail, childName, storyData.title, process.env.FRONTEND_URL);
-    }
     res.json({
       story: {
         title: storyData.title,
