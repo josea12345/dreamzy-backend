@@ -20,7 +20,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "prod-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -341,6 +341,9 @@ app.post("/generate-full-story", async (req, res) => {
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
 
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
+    if (req.body.userEmail) {
+      sendStoryEmail(req.body.userEmail, childName, storyData.title, process.env.FRONTEND_URL);
+    }
     res.json({
       story: {
         title: storyData.title,
