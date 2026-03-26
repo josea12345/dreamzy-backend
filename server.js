@@ -115,7 +115,7 @@ Return ONLY valid JSON:
 {
   "title": "Catchy episode title featuring ${childName}",
   "ageRange": "${ageStyle.range}",
-  "characterDescription": "Brief consistent physical description of ${childName} for illustration consistency",
+  "characterDescription": "Detailed locked character description for ${childName}: hair color and style, eye color, skin tone, clothing colors, any distinctive features. Be VERY specific so every illustration looks like the same child. Example: young girl with curly red hair, green eyes, light brown skin, wearing a yellow raincoat and purple boots",
   "storySummary": "2-3 sentence summary of what happened in this story — used for future episode context",
   "characters": {
     "protagonist": "${childName} description",
@@ -128,7 +128,8 @@ RULES:
 - Use ${childName}'s name at least once per page
 - Weave in these interests as CENTRAL to the plot: ${interestList}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
-- Include characterDescription in every illustrationPrompt for visual consistency
+- CRITICAL: Every illustrationPrompt MUST start with the exact characterDescription verbatim, then describe the scene. This ensures visual consistency across all pages. Example: "Young girl with curly red hair, green eyes, yellow raincoat — she is running through a magical forest..."
+- Use the SAME character appearance in EVERY page illustration — same hair, same clothes, same features
 - storySummary MUST capture key events and characters for future episodes
 - FINAL PAGE ENDINGS — draw inspiration from these master authors and vary each story:
   * Margaret Wise Brown (Goodnight Moon): poetic, atmospheric, acknowledge the world around them ("the quiet old lady whispering hush")
