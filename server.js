@@ -20,7 +20,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lesson-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -37,55 +37,84 @@ const STYLE_PROMPTS = {
 function getAgeStyle(age, pageCountOverride) {
   if (age <= 3) return {
     range: "1-3", pages: pageCountOverride || 5,
-    style: `STYLE: Ages 1-3 (Sandra Boynton / Margaret Wise Brown / Eric Carle style)
-- Lines: 1-2 SHORT lines per page. Max 6 words each.
-- LOTS of repetition — repeat phrases across pages like a refrain
-- Sound play: rhymes, silly words, animal sounds, onomatopoeia
-- Familiar routines: bedtime, food, bath, animals, sleep
-- Every line should have a musical beat you can clap to
-- End with a warm cozy feeling — a hug, a smile, the adventure complete
-- NEVER use complex words or multi-clause sentences
-- NEVER end with sleeping, yawning, or bedtime words`,
+    style: `STYLE: Ages 1-3. Draw from these masters: Eric Carle, Sandra Boynton, Margaret Wise Brown, Rod Campbell, Julia Donaldson, Bill Martin Jr., Mo Willems (simple toddler style), Mem Fox.
+
+WHAT MAKES GREAT TODDLER BOOKS — use ALL of these:
+- REPETITION is everything: repeat key phrases across pages like a musical refrain ("Brown bear, brown bear, what do you see?"). Toddlers love hearing the same thing again.
+- RHYTHM & SOUND: every line should have a beat you can clap to. Use rhyme, alliteration, animal sounds, silly words, onomatopoeia (moo, splat, whoosh, boom).
+- ULTRA SHORT lines: 1-2 lines per page MAXIMUM. 4-6 words each. No complex sentences. No clauses.
+- SIMPLE vocabulary: only words a 2-year-old knows. No metaphors. Concrete, tangible things.
+- FAMILIAR worlds: animals, food, bath time, bedtime routine, family, toys, colors, counting.
+- INTERACTIVE feel: write as if the child can respond — ask simple questions ("Can you moo like a cow?"), invite participation.
+- BRIGHT clear moments: each page = one clear image. One animal. One action. One color.
+- WARM ending: a hug, a laugh, a satisfying return home. Simple joy. Not sleep — accomplishment.
+- EMOTIONAL simplicity: happy, surprised, silly, cozy. No complex feelings.
+- MODEL LINES to inspire you: "Moo maa la la la!" / "Goodnight moon, goodnight cow jumping over the moon" / "I see a red bird! Do you?" / "The caterpillar ate ONE apple. But he was still hungry." / "Barnyard dance! Stomp your feet!"`,
+  };
+  if (age <= 4) return {
+    range: "3-4", pages: pageCountOverride || 5,
+    style: `STYLE: Ages 3-4. Draw from these masters: Dr. Seuss, Julia Donaldson (Gruffalo), Mo Willems (Elephant & Piggie), Karma Wilson (Bear Snores On), Mem Fox.
+
+WHAT MAKES GREAT BOOKS FOR 3-4 YEAR OLDS — use ALL of these:
+- RHYME & RHYTHM: AABB or ABAB schemes. Every page flows musically when read aloud. Clap-able beats.
+- REPETITION WITH VARIATION: a repeated phrase that changes slightly for comic or dramatic effect each time.
+- HUMOR: silly logic, unexpected turns, characters who get things hilariously wrong.
+- SIMPLE EMOTIONS made BIG: fear → courage. Alone → friendship. One clear emotional journey per story.
+- DIALOGUE: characters talk to each other. Give them distinct voices. Speech makes it come alive.
+- CLEAR ARC: problem → 2 funny attempts → clever solution → warm triumphant ending.
+- SHORT lines: 2-3 lines per page. Max 8 words per line.
+- CHILD AS HERO: the child-character solves the problem themselves — not adults.
+- COZY TONE: warm, safe, rhythmic. Like Karma Wilson — the world is gentle and funny.
+- MODEL LINES: "Bear snores on." / "I do not like them, Sam-I-Am!" / "He wasn't scared. Not even a little bit. (He was very scared.)"`,
   };
   if (age <= 5) return {
-    range: "3-5", pages: pageCountOverride || 6,
-    style: `STYLE: Ages 3-5 (Dr. Seuss / Julia Donaldson / Mo Willems style)
-- Lines: 2-3 lines per page. Max 8 words each. Playful and rhythmic.
-- Use rhyme where natural — AABB or ABAB patterns
-- Humor: funny twists, surprising turns, silly dialogue
-- Simple emotions: fear becomes courage, alone becomes friendship
-- Clear arc: problem → funny attempts → solution → happy ending
-- Characters have distinct voices — use dialogue
-- NEVER end with sleeping, yawning, or bedtime words`,
+    range: "4-5", pages: pageCountOverride || 6,
+    style: `STYLE: Ages 4-5. Draw from these masters: Mo Willems (Don't Let the Pigeon!), Julia Donaldson, Dav Pilkey, Oliver Jeffers, Adam Rubin (Dragons Love Tacos), Robert Munsch.
+
+WHAT MAKES GREAT BOOKS FOR 4-5 YEAR OLDS — use ALL of these:
+- ACTUAL PLOT: beginning → clear problem → escalating attempts → surprising resolution. Kids this age can follow a full story arc.
+- HUMOR & CHAOS: big silly energy. Characters who overreact. Absurd situations. Dav Pilkey chaos. Things going hilariously wrong.
+- INTERACTIVE VOICE: speak directly to the reader. "Don't turn the page!" / "You won't believe what happened next." / "Can you help?" Break the fourth wall.
+- RECOGNIZABLE CHARACTERS: give the character a strong personality — greedy, dramatic, brave, clumsy. Characters matter as much as plot now.
+- DIALOGUE-DRIVEN: most of the storytelling happens through speech. Short punchy exchanges. Funny misunderstandings.
+- PARTICIPATION: write moments where kids want to shout back at the story, warn the character, or join in.
+- 2-3 lines per page. Up to 10 words per line. Varied rhythm — some short punchy, some longer.
+- SERIES FEEL: hint that this character will have MORE adventures. Leave them wanting more.
+- MODEL LINES: "The pigeon REALLY wants to drive the bus." / "Oh no. Oh no no no." / "That is the funniest thing I have EVER seen." / "To be continued... (just kidding. Or am I?)"`,
   };
   return {
     range: "5-10", pages: pageCountOverride || 7,
-    style: `STYLE: Ages 5-10 (Roald Dahl / Magic Tree House / Frog and Toad style)
-- Lines: 3-4 lines per page. Up to 12 words. Varied sentence length.
-- Strong narrative arc: setup → rising action → climax → resolution
-- Character growth: the hero learns something or changes by the end
-- Light conflict: a real problem the child must solve using cleverness
-- Humor with wit — jokes kids feel smart for understanding
-- The child's INTERESTS are central to solving the problem
-- NEVER end with sleeping, yawning, or bedtime words — end with triumph or warmth`,
+    style: `STYLE: Ages 5-10. Draw from these masters: Roald Dahl, Mary Pope Osborne (Magic Tree House), Arnold Lobel (Frog & Toad), Beverly Cleary, Jeff Kinney (tone), Kate DiCamillo.
+
+WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
+- STRONG NARRATIVE ARC: clear setup → rising tension → climax → satisfying resolution. Every page moves the plot forward.
+- CHARACTER GROWTH: the hero must change, learn, or overcome something real by the end. Growth feels EARNED.
+- REAL CONFLICT: a genuine problem the child must solve using cleverness, courage, or kindness — not luck.
+- WIT & HUMOR: jokes kids feel SMART for understanding. Irony, wordplay, characters who are funny because they're flawed.
+- VARIED sentences: short punchy lines mixed with longer descriptive ones. 3-5 lines per page, up to 14 words.
+- VIVID details: specific sensory details that paint a picture. Not "a big tree" — "a tree so tall its top was hidden in clouds."
+- FRIENDSHIP & STAKES: the hero should care about someone else. What they risk losing matters.
+- THE CHILD'S INTERESTS drive the plot — interests are not decoration, they ARE the adventure.
+- DIALOGUE that reveals character — how people talk tells us who they are.
+- MODEL LINES: "James had never seen such a thing in all his life." / "Frog and Toad were friends." / "The Magic Tree House began to spin." / "Something amazing was about to happen."`,
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options);
   } catch (e) {
     if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt + 1);
     }
     throw e;
   }
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -220,7 +249,7 @@ async function generateVoice(text, ageNum) {
 async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
   try {
     await resend.emails.send({
-      from: "Dreamzy <hello@dreamzy.xyz>",
+      from: "Dreamzy <stories@dreamzy.xyz>",
       to: email,
       subject: `${childName}'s story is ready! 📖`,
       html: `
@@ -282,7 +311,7 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount });
     // Improve the final page ending
     storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
