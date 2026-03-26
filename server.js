@@ -310,11 +310,12 @@ app.post("/generate-full-story", async (req, res) => {
   const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   console.log("Using illustration style:", imgStyle);
-  if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
+  if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
+  if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
   const ageNum = parseInt(age) || 5;
   try {
     const isContinuation = !!previousStory;
-    console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
+    console.log("Generating story for " + (childName||customHero||"unknown") + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
     // Override characterDescription with parent-provided appearance if available
