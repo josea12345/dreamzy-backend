@@ -100,10 +100,10 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance);
   } catch (e) {
     if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
@@ -114,7 +114,7 @@ async function generateStoryWithRetry(childName, age, interests, theme, mood, pr
   }
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -316,7 +316,7 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount });
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance);
     // Override characterDescription with parent-provided appearance if available
     if (appearance && appearance.trim()) {
       storyData.characterDescription = `${childName}: ${appearance.trim()}`;
