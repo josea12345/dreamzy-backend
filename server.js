@@ -100,21 +100,21 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero);
   } catch (e) {
     if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, attempt + 1);
     }
     throw e;
   }
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -137,14 +137,14 @@ Rules for continuation:
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4000,
-    system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child. This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
+    system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child.${customHero ? ` The MAIN HERO of this story is NOT the child — it is: ${customHero}. ${childName} appears as a supporting character or friend, but ${customHero} drives the plot. Make ${customHero} the protagonist with a clear personality, name if appropriate, and their own arc.` : ""} This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
 ${continuationContext}
 Return ONLY valid JSON:
 {
   "title": "Catchy episode title featuring ${childName}",
   "ageRange": "${ageStyle.range}",
-  "characterDescription": "${appearance ? `${childName}: ${appearance}` : `Detailed locked character description for ${childName}: hair color and style, eye color, skin tone, clothing colors, any distinctive features. Be VERY specific so every illustration looks like the same child.`}",
+  "characterDescription": "${customHero ? `The main character is ${customHero} — describe their appearance in detail for illustration consistency (color, size, distinctive features, any clothing/accessories)` : appearance ? `${childName}: ${appearance}` : `Detailed locked character description for ${childName}: hair color and style, eye color, skin tone, clothing colors, any distinctive features. Be VERY specific so every illustration looks like the same child.`}",
   "storySummary": "2-3 sentence summary of what happened in this story — used for future episode context",
   "characters": {
     "protagonist": "${childName} description",
@@ -307,7 +307,7 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   console.log("Using illustration style:", imgStyle);
   if (!childName || !interests?.length) return res.status(400).json({ error: "Need child name and interests" });
@@ -316,7 +316,7 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
     // Override characterDescription with parent-provided appearance if available
     if (appearance && appearance.trim()) {
       storyData.characterDescription = `${childName}: ${appearance.trim()}`;
