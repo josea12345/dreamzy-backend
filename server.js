@@ -393,7 +393,7 @@ app.post("/generate-pdf", async (req, res) => {
     const titleText = story.title || "A Dreamzy Story";
     cover.drawText(titleText, { x: margin, y: pageHeight/2 + 60, size: titleSize, font: titleFont, color: rgb(1,1,1), maxWidth: pageWidth - margin*2 });
     cover.drawText(`A story for ${story.childName}`, { x: margin, y: pageHeight/2 - 10, size: 22, font: bodyFont, color: rgb(0.68, 0.55, 1) });
-    cover.drawText(`Made with Dreamzy ✦`, { x: margin, y: margin, size: 12, font: bodyFont, color: rgb(0.4, 0.35, 0.55) });
+    cover.drawText(`Made with Dreamzy *`, { x: margin, y: margin, size: 12, font: bodyFont, color: rgb(0.4, 0.35, 0.55) });
 
     // Story pages
     for (let i = 0; i < story.pages.length; i++) {
