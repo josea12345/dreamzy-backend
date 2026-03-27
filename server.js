@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "reminder-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "reminder-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -785,7 +785,7 @@ app.post("/send-bedtime-reminders", async (req, res) => {
               <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
 
                 <div style="text-align:center;margin-bottom:32px;">
-                  <div style="font-size:56px;margin-bottom:8px;">🌙</div>
+                  <img src="https://dreamzy.xyz/logo.png" width="80" height="80" style="display:block;margin:0 auto 8px;border-radius:16px;" alt="Dreamzy"/>
                   <div style="font-size:28px;font-weight:700;color:white;">
                     Dream<span style="color:#f4a87a">zy</span>
                   </div>
