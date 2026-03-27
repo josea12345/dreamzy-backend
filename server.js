@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "reminder-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "reminder-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
