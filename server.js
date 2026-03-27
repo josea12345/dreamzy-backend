@@ -785,13 +785,14 @@ app.post("/send-bedtime-reminders", async (req, res) => {
               <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
 
                 <div style="text-align:center;margin-bottom:32px;">
-                  <img src="https://dreamzy.xyz/logo.png" width="80" height="80" style="display:block;margin:0 auto 8px;border-radius:16px;" alt="Dreamzy"/>
+                  <img src="https://dreamzy.xyz/logo.png" width="80" height="80" style="display:block;margin:0 auto 8px;" alt="Dreamzy"/>
                   <div style="font-size:28px;font-weight:700;color:white;">
                     Dream<span style="color:#f4a87a">zy</span>
                   </div>
                 </div>
 
                 <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;text-align:center;">
+                  <div style="font-size:48px;margin-bottom:16px;">🌙</div>
                   <h1 style="color:white;font-size:24px;margin:0 0 12px;font-weight:700;font-style:italic;">
                     Bedtime is almost here ✨
                   </h1>
