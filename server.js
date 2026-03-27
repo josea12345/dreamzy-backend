@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "story-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "reminder-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -317,19 +317,31 @@ async function generateImage(prompt, characterDescription, style, attempt) {
   }
 }
 
-async function generateVoice(text, ageNum) {
+async function generateVoice(text, ageNum, attempt) {
+  if (attempt === undefined) attempt = 0;
   const voiceSettings = ageNum <= 3
     ? { stability: 0.80, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
     : ageNum <= 5
     ? { stability: 0.65, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true }
     : { stability: 0.55, similarity_boost: 0.80, style: 0.35, use_speaker_boost: true };
-  const r = await axios.post(
-    "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
-    { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings },
-    { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
-  );
-  // Return raw base64 data URI string directly
-  return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
+  try {
+    const r = await axios.post(
+      "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+      { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings },
+      { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
+    );
+    return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 429 && attempt < 3) {
+      // ElevenLabs rate limit — back off significantly
+      const waitSec = [15, 30, 60][attempt];
+      console.log("  ElevenLabs rate limited, waiting " + waitSec + "s (attempt " + (attempt+1) + ")...");
+      await sleep(waitSec * 1000);
+      return generateVoice(text, ageNum, attempt + 1);
+    }
+    throw e;
+  }
 }
 
 // ── Email ────────────────────────────────────────────────────────────────────
@@ -485,16 +497,15 @@ app.post("/generate-full-story", async (req, res) => {
     const audioUrls = [];
     for (let i = 0; i < storyData.pages.length; i++) {
       await updateProgress(70 + Math.round((i / storyData.pages.length) * 25), "narrating");
+      // Small gap between calls to avoid bursting ElevenLabs
+      if (i > 0) await sleep(300);
       let result = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum);
-          console.log("  Voice " + (i + 1) + "/" + storyData.pages.length + " done");
-          break;
-        } catch (e) {
-          console.error("  Voice " + (i + 1) + " attempt " + (attempt + 1) + " failed:", e.message);
-          if (attempt < 2) await sleep(2000);
-        }
+      try {
+        result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum);
+        console.log("  Voice " + (i + 1) + "/" + storyData.pages.length + " done");
+      } catch (e) {
+        console.error("  Voice " + (i + 1) + " failed after retries:", e.message);
+        // null — frontend will skip narration for this page gracefully
       }
       audioUrls.push(result);
     }
@@ -731,6 +742,99 @@ app.post("/generate-pdf", async (req, res) => {
     console.log("PDF generated:", story.title);
   } catch (e) {
     console.error("PDF error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Bedtime reminder emails ───────────────────────────────────────────────────
+app.post("/send-bedtime-reminders", async (req, res) => {
+  // Simple secret check so random people can't spam your users
+  const secret = req.headers["x-cron-secret"];
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    // Get all users with reminders enabled
+    const { data: users, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id, email, bedtime_reminder_name")
+      .eq("bedtime_reminder", true)
+      .not("email", "is", null);
+
+    if (error) throw error;
+    if (!users?.length) {
+      console.log("No bedtime reminder users found");
+      return res.json({ sent: 0 });
+    }
+
+    console.log(`Sending bedtime reminders to ${users.length} users...`);
+    let sent = 0;
+
+    for (const user of users) {
+      try {
+        const childName = user.bedtime_reminder_name || "your child";
+        await resend.emails.send({
+          from: "Dreamzy <stories@dreamzy.xyz>",
+          to: user.email,
+          subject: `🌙 Time for ${childName}'s bedtime story!`,
+          html: `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body style="margin:0;padding:0;background:#0d0a1e;font-family:'Helvetica Neue',Arial,sans-serif;">
+              <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+
+                <div style="text-align:center;margin-bottom:32px;">
+                  <div style="font-size:56px;margin-bottom:8px;">🌙</div>
+                  <div style="font-size:28px;font-weight:700;color:white;">
+                    Dream<span style="color:#f4a87a">zy</span>
+                  </div>
+                </div>
+
+                <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;text-align:center;">
+                  <h1 style="color:white;font-size:24px;margin:0 0 12px;font-weight:700;font-style:italic;">
+                    Bedtime is almost here ✨
+                  </h1>
+                  <p style="color:rgba(255,255,255,0.5);font-size:15px;margin:0 0 8px;line-height:1.7;">
+                    ${childName}'s personalized story is waiting to be created.<br/>
+                    It only takes a minute — Claude writes it, AI illustrates it,<br/>
+                    and a warm voice narrates it.
+                  </p>
+                  <p style="color:rgba(255,255,255,0.3);font-size:13px;margin:0 0 28px;">
+                    Tonight's adventure is just a tap away.
+                  </p>
+                  <a href="${process.env.FRONTEND_URL || "https://dreamzy.xyz"}"
+                    style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#D4845A,#C878C0,#8B5CF6);border-radius:20px;color:white;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 20px rgba(212,132,90,0.4);">
+                    ✨ Create Tonight's Story
+                  </a>
+                </div>
+
+                <div style="text-align:center;margin-top:20px;">
+                  <p style="color:rgba(255,255,255,0.15);font-size:12px;margin:0 0 6px;">
+                    Made with ✨ by Dreamzy &nbsp;·&nbsp;
+                    <a href="https://dreamzy.xyz" style="color:rgba(255,255,255,0.2);">dreamzy.xyz</a>
+                  </p>
+                  <p style="color:rgba(255,255,255,0.1);font-size:11px;margin:0;">
+                    To turn off these reminders, open Dreamzy and toggle off "Bedtime reminder".
+                  </p>
+                </div>
+              </div>
+            </body>
+            </html>
+          `,
+        });
+        sent++;
+        console.log("Bedtime reminder sent to:", user.email);
+        // Small delay to avoid Resend rate limits
+        await sleep(200);
+      } catch (e) {
+        console.error("Reminder failed for:", user.email, e.message);
+      }
+    }
+
+    res.json({ sent, total: users.length });
+  } catch (e) {
+    console.error("Bedtime reminders error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
