@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "storage-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "story-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -116,10 +116,62 @@ async function generateStoryWithRetry(childName, age, interests, theme, mood, pr
   }
 }
 
+// Build a page-by-page blueprint so the AI knows exactly what each page must accomplish.
+// This is the core fix for truncated arcs — without this, the AI invents its own pacing
+// and consistently runs out of pages before resolving the conflict.
+function getPageBlueprint(pageCount) {
+  if (pageCount <= 5) return `
+PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
+  Page 1: WORLD & CHARACTER — introduce the hero in their world. Establish the setting and mood. Drop a small hint of what's coming.
+  Page 2: THE PROBLEM APPEARS — the challenge, wish, or quest becomes clear. The hero decides to act.
+  Page 3: THE ATTEMPT & COMPLICATION — the hero tries something. It doesn't fully work, or something unexpected happens. Tension rises.
+  Page 4: THE RESOLUTION — the hero figures it out and solves the problem. This is the climax. Show it happening, don't skip it.
+  Page 5: THE WARM ENDING — aftermath. The hero feels the joy of what they accomplished. A quiet, satisfied, warm final moment.
+
+CRITICAL: The problem MUST be solved on page 4, not page 5. Page 5 is purely the warm emotional landing — never the moment of resolution.`;
+
+  if (pageCount <= 6) return `
+PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
+  Page 1: WORLD & CHARACTER — introduce the hero in their world. Establish mood and setting vividly.
+  Page 2: THE PROBLEM APPEARS — the challenge or quest becomes clear. The hero decides to act.
+  Page 3: FIRST ATTEMPT — the hero tries something bold. A small success or an unexpected complication.
+  Page 4: THE REAL CHALLENGE — the hardest moment. Things look uncertain. The hero must dig deep.
+  Page 5: THE RESOLUTION — the hero solves it. Show this moment in full — the triumph must be seen.
+  Page 6: THE WARM ENDING — quiet aftermath. Joy, connection, satisfaction. A gentle close.
+
+CRITICAL: Resolution happens on page 5. Page 6 is the emotional landing only — never the climax.`;
+
+  if (pageCount <= 8) return `
+PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
+  Page 1: WORLD & CHARACTER — hero in their world, vivid setting, hint of what's to come.
+  Page 2: THE INCITING MOMENT — something happens that sets the adventure in motion.
+  Page 3: THE GOAL IS SET — hero commits to the quest. First steps taken.
+  Page 4: FIRST OBSTACLE — something goes wrong or gets complicated. Hero adapts.
+  Page 5: DEEPENING STAKES — the challenge grows. A friend helps, or a new discovery changes things.
+  Page 6: THE DARKEST MOMENT — it seems like the hero might not succeed.
+  Page 7: THE RESOLUTION — hero solves the problem. The triumphant moment. Show it fully.
+  Page 8: THE WARM ENDING — quiet joy, connection, satisfaction. The emotional landing.
+
+CRITICAL: Climax on page 7. Page 8 is warm aftermath only.`;
+
+  // 9–16 pages: use proportional thirds
+  const setupEnd = Math.floor(pageCount * 0.25);
+  const climaxPage = pageCount - 1;
+  return `
+PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint:
+  Pages 1–${setupEnd}: SETUP — introduce hero, world, and the problem or quest.
+  Pages ${setupEnd+1}–${climaxPage-1}: RISING ACTION — attempts, complications, escalating stakes, allies and obstacles.
+  Page ${climaxPage}: THE RESOLUTION — the hero solves the main problem. Show the moment fully. This is the climax.
+  Page ${pageCount}: WARM ENDING — quiet aftermath, joy, connection. Emotional landing only — not the climax.
+
+CRITICAL: The conflict must be fully resolved by page ${climaxPage}. Page ${pageCount} is the warm emotional close only.`;
+}
+
 async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
+  const pageBlueprint = getPageBlueprint(ageStyle.pages);
 
   const continuationContext = previousStory ? `
 IMPORTANT — THIS IS A CONTINUATION (Episode ${(previousStory.episode || 1) + 1}):
@@ -141,6 +193,7 @@ Rules for continuation:
     max_tokens: 4000,
     system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child.${customHero ? ` The MAIN HERO of this story is NOT the child — it is: ${customHero}. ${childName} appears as a supporting character or friend, but ${customHero} drives the plot. Make ${customHero} the protagonist with a clear personality, name if appropriate, and their own arc.` : ""} This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
+${pageBlueprint}
 ${continuationContext}
 Return ONLY valid JSON:
 {
@@ -155,12 +208,14 @@ Return ONLY valid JSON:
   "pages": [{"pageNumber":1,"lines":["line 1","line 2"],"illustrationPrompt":"Detailed scene description","soundNote":"reading tone"}]
 }
 RULES:
-- Generate exactly ${ageStyle.pages} pages
+- Generate exactly ${ageStyle.pages} pages — no more, no less
+- Follow the PAGE-BY-PAGE STRUCTURE above exactly. Each page must do what its blueprint says.
 - Use ${childName}'s name naturally — not on every single line, just when it feels right
-- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in. A story about dogs and space is fine. A story that mentions dogs, space, pizza, and robots on every page is not."}
+- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON: Weave "${lesson}" into the story organically — through what happens, not through characters saying it out loud.` : ""}
 - NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible". Use simple direct language. Show don't tell.
 - EVERY sentence must sound natural when read aloud to a child. If it sounds like a school essay, rewrite it.
+- PACING CHECK: Before writing page N, ask yourself — "have I already shown the resolution?" If yes and this is the last page, write the warm landing. If no and this is the second-to-last page, this page MUST contain the resolution.
 - ILLUSTRATION PROMPTS — this is critical for visual consistency:
   * Every illustrationPrompt MUST follow this exact format: "[CHARACTER DESCRIPTION] is [DOING WHAT] in/at [SPECIFIC LOCATION]. [SUPPORTING CHARACTERS if any]. [MOOD/LIGHTING]. [KEY VISUAL DETAILS]."
   * Example: "A girl with curly red hair, green eyes, yellow raincoat is climbing a giant mushroom in an enchanted forest. A small blue rabbit watches from below. Warm golden light. Magical and whimsical."
@@ -169,8 +224,7 @@ RULES:
   * Describe the EMOTION on the character's face — surprised, delighted, determined, curious
   * Always include lighting/atmosphere: warm sunset, cozy candlelight, bright sunny meadow, misty morning
   * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.
-- storySummary MUST capture key events and characters for future episodes.
-- FINAL PAGE: End with a warm, earned emotional moment. Vary the style — a hug, a laugh, heading home satisfied, quiet wonder, a promise of tomorrow. NOT sleep unless it feels completely natural.`,
+- storySummary MUST capture key events and characters for future episodes.`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
 
@@ -180,7 +234,15 @@ RULES:
   return JSON.parse(match[0]);
 }
 
+// Only replace the final page if it contains sleep words — never replace a good resolution
 function improveEnding(finalPage, childName) {
+  const sleepWords = /\b(sleep|slumber|yawn|dreamed|dreamt|drift|drifted|doze|dozed|snooze|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime)\b/i;
+  const lastLines = (finalPage.lines || []).join(" ");
+  if (!sleepWords.test(lastLines)) {
+    // The AI wrote a good ending — leave it alone
+    return finalPage;
+  }
+  // Only fires when the ending literally has the child falling asleep
   const endings = [
     [`${childName} laughs and cheers — what an adventure!`, `"Let's do it again!" ${childName} says with a grin.`],
     [`The sun paints the sky gold and pink.`, `${childName} smiles — today was absolutely perfect.`],
@@ -188,15 +250,11 @@ function improveEnding(finalPage, childName) {
     [`"Best adventure EVER!" ${childName} grins wide.`, `Tomorrow holds even more wonders to find.`],
     [`${childName} looks up at the first twinkling star.`, `Heart full and happy, the world feels wonderful.`],
     [`Hand in hand, they skip toward home.`, `${childName} cannot wait to come back.`],
-    [`A big warm hug ends the perfect day.`, `${childName} smiles from ear to ear.`],
     [`"We did it!" ${childName} shouts with joy.`, `The whole world heard — and cheered along.`],
     [`${childName} takes a deep breath of evening air.`, `Everything feels just right in the whole wide world.`],
-    [`The adventure is done, the story complete.`, `${childName} knows: the best is yet to come.`],
-    [`Stars begin to appear, one by one.`, `${childName} whispers: "What a day. What a day."`],
-    [`${childName} turns and waves one last goodbye.`, `Until next time, brave adventurer. Until next time.`],
   ];
   const picked = endings[Math.floor(Math.random() * endings.length)];
-  console.log("Ending applied:", picked[0]);
+  console.log("Sleep ending detected — replaced with:", picked[0]);
   return { ...finalPage, lines: picked };
 }
 
