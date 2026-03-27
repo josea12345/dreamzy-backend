@@ -21,7 +21,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
 const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "clean-v3" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -318,24 +318,6 @@ app.post("/generate-full-story", async (req, res) => {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const genId = (childName||customHero||"story").toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Date.now();
-    if (req.body.userId) {
-      const { error: genError } = await supabaseAdmin.from("generations").insert({
-        id: genId, user_id: req.body.userId,
-        title: customHero ? "A story with " + customHero : (childName||"story") + "'s story",
-        child_name: childName || customHero || "story",
-        age: ageNum, created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24*60*60*1000).toISOString(),
-        status: "generating", progress: 0, pages: []
-      });
-      if (genError) console.error("Gen insert error:", JSON.stringify(genError));
-      else console.log("Generation record created:", genId);
-    }
-    const updateProgress = async (progress, status) => {
-      if (req.body.userId) {
-        try { await supabaseAdmin.from("generations").update({ progress, status }).eq("id", genId); } catch(e) {}
-      }
-    };
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
     await updateProgress(15, "generating");
     // Override characterDescription with parent-provided appearance if available
@@ -374,6 +356,7 @@ app.post("/generate-full-story", async (req, res) => {
     const imageUrls = [];
     for (let i = 0; i < storyData.pages.length; i++) {
       console.log("  Image " + (i+1) + "/" + storyData.pages.length + "...");
+      await updateProgress(20 + Math.round((i / storyData.pages.length) * 45), "illustrating");
       let url = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -391,6 +374,7 @@ app.post("/generate-full-story", async (req, res) => {
     await updateProgress(70, "narrating");
     const audioUrls = [];
     for (let i = 0; i < storyData.pages.length; i++) {
+      await updateProgress(70 + Math.round((i / storyData.pages.length) * 25), "narrating");
       let result = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -418,7 +402,10 @@ app.post("/generate-full-story", async (req, res) => {
           child_name: childName || customHero || "story",
           status: "complete",
           progress: 100,
-          pages: storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: null }))
+          pages: [
+            { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: null },
+            ...storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: null }))
+          ]
         }).eq("id", genId);
         console.log("Generation complete:", genId);
       } catch(e) { console.error("Generation update failed:", e.message); }
