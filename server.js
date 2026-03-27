@@ -21,7 +21,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
 const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "progress-v3" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "endings-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -316,24 +316,7 @@ app.post("/generate-full-story", async (req, res) => {
   const ageNum = parseInt(age) || 5;
   try {
     const isContinuation = !!previousStory;
-    console.log("Generating story for " + (childName||customHero||"unknown") + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
-
-    const genId = (childName||customHero||"story").toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Date.now();
-    if (req.body.userId) {
-      const { error: genError } = await supabaseAdmin.from("generations").insert({
-        id: genId, user_id: req.body.userId,
-        title: customHero ? "A story with " + customHero : (childName || "story") + "'s story",
-        child_name: childName || customHero || "story",
-        age: ageNum, created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24*60*60*1000).toISOString(),
-        status: "generating", progress: 0, pages: []
-      });
-      if (genError) console.error("Gen insert error:", JSON.stringify(genError));
-      else console.log("Generation record created:", genId);
-    }
-    const updateProgress = async (progress, status) => {
-      if (req.body.userId) { try { await supabaseAdmin.from("generations").update({ progress, status }).eq("id", genId); } catch(e) {} }
-    };
+    console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
     await updateProgress(15, "generating");
