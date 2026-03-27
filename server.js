@@ -211,7 +211,8 @@ async function uploadImageToStorage(base64Data, storyId, pageIndex) {
     const { error } = await supabaseAdmin.storage
       .from('story-images')
       .upload(fileName, buffer, { contentType: 'image/jpeg', upsert: true });
-    if (error) { console.error('Storage upload error:', error.message); return null; }
+    if (error) { console.error('Storage upload error:', JSON.stringify(error)); return null; }
+    console.log('Image uploaded to storage:', fileName);
     const { data } = supabaseAdmin.storage.from('story-images').getPublicUrl(fileName);
     return data.publicUrl;
   } catch(e) { console.error('Storage upload failed:', e.message); return null; }
