@@ -21,7 +21,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
 const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "storage-v1" }));
+// FIX: bump version so we can confirm Railway deployed this
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "storage-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -106,7 +107,7 @@ async function generateStoryWithRetry(childName, age, interests, theme, mood, pr
   try {
     return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero);
   } catch (e) {
-    if ((e.status === 529 || e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
+    if ((e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
       return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, attempt + 1);
@@ -179,9 +180,6 @@ RULES:
   return JSON.parse(match[0]);
 }
 
-
-
-// Regenerate final page with a better ending
 function improveEnding(finalPage, childName) {
   const endings = [
     [`${childName} laughs and cheers — what an adventure!`, `"Let's do it again!" ${childName} says with a grin.`],
@@ -202,27 +200,35 @@ function improveEnding(finalPage, childName) {
   return { ...finalPage, lines: picked };
 }
 
-
-// Upload image to Supabase Storage and return public URL
+// ── FIX: Always upload to Supabase Storage — regardless of userId ────────────
+// Returns public URL on success, null on failure (caller falls back to nothing)
 async function uploadImageToStorage(base64Data, storyId, pageIndex) {
   try {
-    const buffer = Buffer.from(base64Data, 'base64');
+    // Strip data URI prefix if present — we only want the raw base64
+    const raw = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
+    const buffer = Buffer.from(raw, "base64");
     const fileName = `${storyId}/page-${pageIndex}.jpg`;
     const { error } = await supabaseAdmin.storage
-      .from('story-images')
-      .upload(fileName, buffer, { contentType: 'image/jpeg', upsert: true });
-    if (error) { console.error('Storage upload error:', JSON.stringify(error)); return null; }
-    console.log('Image uploaded to storage:', fileName);
-    const { data } = supabaseAdmin.storage.from('story-images').getPublicUrl(fileName);
+      .from("story-images")
+      .upload(fileName, buffer, { contentType: "image/jpeg", upsert: true });
+    if (error) {
+      console.error("Storage upload error:", JSON.stringify(error));
+      return null;
+    }
+    const { data } = supabaseAdmin.storage.from("story-images").getPublicUrl(fileName);
+    console.log("Image uploaded to storage:", fileName, "→", data.publicUrl);
     return data.publicUrl;
-  } catch(e) { console.error('Storage upload failed:', e.message); return null; }
+  } catch (e) {
+    console.error("Storage upload failed:", e.message);
+    return null;
+  }
 }
 
 async function generateImage(prompt, characterDescription, style, attempt) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
   try {
-    const fullPrompt = stylePrompt + 
+    const fullPrompt = stylePrompt +
       " ILLUSTRATION FOR A CHILDREN'S BOOK PAGE. " +
       "The main character: " + characterDescription + ". " +
       "Scene: " + prompt + ". " +
@@ -241,6 +247,7 @@ async function generateImage(prompt, characterDescription, style, attempt) {
     const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith("image/"));
     if (!imagePart) throw new Error("No image in response");
     console.log("    Image ready! size: " + imagePart.inlineData.data.length);
+    // Return raw base64 (no data URI prefix) — uploadImageToStorage handles both forms
     return "data:" + imagePart.inlineData.mimeType + ";base64," + imagePart.inlineData.data;
   } catch (e) {
     if (e.response?.status === 429 && attempt < 3) {
@@ -263,6 +270,7 @@ async function generateVoice(text, ageNum) {
     { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings },
     { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
   );
+  // Return raw base64 data URI string directly
   return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
 }
 
@@ -279,16 +287,12 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
         <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
         <body style="margin:0;padding:0;background:#0d0a1e;font-family:'Helvetica Neue',Arial,sans-serif;">
           <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
-            
-            <!-- Logo -->
             <div style="text-align:center;margin-bottom:32px;">
               <span style="font-size:48px;">📖</span>
               <div style="font-size:28px;font-weight:700;color:white;margin-top:8px;">
                 Dream<span style="color:#f4a87a">zy</span>
               </div>
             </div>
-
-            <!-- Card -->
             <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;text-align:center;">
               <div style="font-size:40px;margin-bottom:16px;">✨</div>
               <h1 style="color:white;font-size:22px;margin:0 0 8px;font-weight:700;">
@@ -298,16 +302,14 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
                 <em style="color:rgba(255,255,255,0.8)">"${storyTitle}"</em><br/>
                 A personalized bedtime story, just for ${childName}.
               </p>
-              <a href="${shareUrl || 'https://dreamzy.xyz'}" 
+              <a href="${shareUrl || "https://dreamzy.xyz"}"
                 style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#D4845A,#C878C0,#8B5CF6);border-radius:16px;color:white;text-decoration:none;font-weight:700;font-size:16px;box-shadow:0 4px 20px rgba(212,132,90,0.4);">
                 ▶ Read the Story
               </a>
             </div>
-
-            <!-- Footer -->
             <div style="text-align:center;margin-top:24px;">
               <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;">
-                Made with ✨ by Dreamzy &nbsp;·&nbsp; 
+                Made with ✨ by Dreamzy &nbsp;·&nbsp;
                 <a href="https://dreamzy.xyz" style="color:rgba(255,255,255,0.3);">dreamzy.xyz</a>
               </p>
             </div>
@@ -317,7 +319,7 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
       `,
     });
     console.log("Story email sent to:", email);
-  } catch(e) {
+  } catch (e) {
     console.error("Email failed:", e.message);
   }
 }
@@ -329,34 +331,38 @@ app.post("/generate-full-story", async (req, res) => {
   if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
   if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
   const ageNum = parseInt(age) || 5;
+
   try {
     const isContinuation = !!previousStory;
     console.log("Generating story for " + childName + " (age " + ageNum + ")" + (isContinuation ? " — Episode " + ((previousStory.episode || 1) + 1) : "") + "...");
 
-    const genId = (childName||customHero||"story").toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Date.now();
+    // genId is ALWAYS created — used as the storage path even for anonymous users
+    const genId = (childName || customHero || "story").toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Date.now();
+
     if (req.body.userId) {
       const { error: genError } = await supabaseAdmin.from("generations").insert({
         id: genId, user_id: req.body.userId,
-        title: customHero ? "A story with " + customHero : (childName||"story") + "'s story",
+        title: customHero ? "A story with " + customHero : (childName || "story") + "'s story",
         child_name: childName || customHero || "story",
         age: ageNum, created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24*60*60*1000).toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         status: "generating", progress: 0, pages: []
       });
       if (genError) console.error("Gen insert error:", JSON.stringify(genError));
       else console.log("Generation record created:", genId);
     }
+
     const updateProgress = async (progress, status) => {
       if (req.body.userId) {
-        try { await supabaseAdmin.from("generations").update({ progress, status }).eq("id", genId); } catch(e) {}
+        try { await supabaseAdmin.from("generations").update({ progress, status }).eq("id", genId); } catch (e) {}
       }
     };
+
     const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
     await updateProgress(15, "generating");
-    // Override characterDescription with parent-provided appearance if available
+
     if (appearance && appearance.trim()) {
       storyData.characterDescription = `${childName}: ${appearance.trim()}`;
-      // Inject into all illustration prompts
       storyData.pages = storyData.pages.map(p => ({
         ...p,
         illustrationPrompt: `${storyData.characterDescription} — ${p.illustrationPrompt}`
@@ -364,55 +370,58 @@ app.post("/generate-full-story", async (req, res) => {
       console.log("Using parent appearance:", storyData.characterDescription);
     }
 
-    // Improve the final page ending
     storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
     await updateProgress(20, "illustrating");
-    // Generate cover image first
+
+    // ── Cover image ──────────────────────────────────────────────────────────
     const coverPrompt = `A beautiful storybook cover illustration for a children's book titled "${storyData.title}". The main character is ${storyData.characterDescription || childName}. Magical, warm, inviting cover art with the feeling of a classic picture book. Centered composition, rich colors, whimsical atmosphere.`;
     console.log("  Cover image...");
     let coverImageUrl = null;
     try {
       const coverBase64 = await generateImage(coverPrompt, storyData.characterDescription, imgStyle);
-      if (coverBase64 && req.body.userId) {
-        const uploaded = await uploadImageToStorage(coverBase64, genId, 0);
-        coverImageUrl = uploaded || coverBase64;
-      } else { coverImageUrl = coverBase64; }
+      // FIX: always upload to storage — do NOT fall back to storing base64 in DB
+      const uploaded = await uploadImageToStorage(coverBase64, genId, 0);
+      coverImageUrl = uploaded; // null if upload failed — frontend shows placeholder
+      if (!uploaded) console.warn("  Cover storage upload failed, imageUrl will be null");
+    } catch (e) {
+      console.error("  Cover image failed:", e.message);
     }
-    catch(e) { console.error("  Cover image failed:", e.message); }
 
-    // Generate cover narration
+    // ── Cover narration ──────────────────────────────────────────────────────
     let coverAudioUrl = null;
     try {
       const coverText = `${storyData.title}. A story for ${childName}.`;
-      const coverAudio = await generateVoice(coverText, ageNum);
-      coverAudioUrl = coverAudio?.audioUrl || coverAudio || null;
-    } catch(e) { console.error("  Cover audio failed:", e.message); }
+      // FIX: generateVoice returns a string directly, not an object
+      coverAudioUrl = await generateVoice(coverText, ageNum);
+    } catch (e) {
+      console.error("  Cover audio failed:", e.message);
+    }
 
-    // Sequential image generation — more reliable for long stories
+    // ── Page images — sequential ─────────────────────────────────────────────
     const imageUrls = [];
     for (let i = 0; i < storyData.pages.length; i++) {
-      console.log("  Image " + (i+1) + "/" + storyData.pages.length + "...");
+      console.log("  Image " + (i + 1) + "/" + storyData.pages.length + "...");
       await updateProgress(20 + Math.round((i / storyData.pages.length) * 45), "illustrating");
       let url = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const base64 = await generateImage(storyData.pages[i].illustrationPrompt, storyData.characterDescription, imgStyle);
-          if (base64 && req.body.userId) {
-            const uploaded = await uploadImageToStorage(base64, genId, i + 1);
-            url = uploaded || base64;
-          } else { url = base64; }
+          // FIX: always upload to storage — never store raw base64
+          url = await uploadImageToStorage(base64, genId, i + 1);
+          if (!url) console.warn(`  Page ${i+1} storage upload failed, imageUrl will be null`);
           break;
-        } catch(e) {
-          console.error("  Image " + (i+1) + " attempt " + (attempt+1) + " failed:", e.message);
+        } catch (e) {
+          console.error("  Image " + (i + 1) + " attempt " + (attempt + 1) + " failed:", e.message);
           if (attempt < 2) await sleep(2000);
         }
       }
-      imageUrls.push(url);
+      imageUrls.push(url); // null entries are handled gracefully by frontend
     }
 
+    // ── Narration ────────────────────────────────────────────────────────────
     console.log("Generating narration...");
     await updateProgress(70, "narrating");
     const audioUrls = [];
@@ -422,10 +431,10 @@ app.post("/generate-full-story", async (req, res) => {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum);
-          console.log("  Voice " + (i+1) + "/" + storyData.pages.length + " done");
+          console.log("  Voice " + (i + 1) + "/" + storyData.pages.length + " done");
           break;
-        } catch(e) {
-          console.error("  Voice " + (i+1) + " attempt " + (attempt+1) + " failed:", e.message);
+        } catch (e) {
+          console.error("  Voice " + (i + 1) + " attempt " + (attempt + 1) + " failed:", e.message);
           if (attempt < 2) await sleep(2000);
         }
       }
@@ -434,10 +443,17 @@ app.post("/generate-full-story", async (req, res) => {
 
     const seriesId = previousStory?.series_id || (childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now());
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
-
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
 
-    // Update generation record with completed story
+    // ── Build final pages array ──────────────────────────────────────────────
+    // imageUrl is a storage URL (https://...) or null — NEVER base64
+    // audioUrl is a base64 data URI (not stored in DB, only sent to client)
+    const finalPages = [
+      { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: null },
+      ...storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i] || null, audioUrl: null }))
+    ];
+
+    // ── Update generations record (no base64 anywhere) ───────────────────────
     if (req.body.userId) {
       try {
         await supabaseAdmin.from("generations").update({
@@ -445,17 +461,20 @@ app.post("/generate-full-story", async (req, res) => {
           child_name: childName || customHero || "story",
           status: "complete",
           progress: 100,
-          pages: [
-            { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: null },
-            ...storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: null }))
-          ]
+          // Store storage URLs only — audio is regenerated on read
+          pages: finalPages
         }).eq("id", genId);
         console.log("Generation complete:", genId);
-      } catch(e) { console.error("Generation update failed:", e.message); }
+      } catch (e) {
+        console.error("Generation update failed:", e.message);
+      }
     }
+
     if (req.body.userEmail) {
       sendStoryEmail(req.body.userEmail, childName, storyData.title, process.env.FRONTEND_URL);
     }
+
+    // ── Response: storage URLs + audio (audio only lives in memory/client) ───
     res.json({
       story: {
         title: storyData.title,
@@ -469,7 +488,11 @@ app.post("/generate-full-story", async (req, res) => {
         characters: storyData.characters,
         pages: [
           { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: coverAudioUrl },
-          ...storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i], audioUrl: audioUrls[i] }))
+          ...storyData.pages.map((p, i) => ({
+            ...p,
+            imageUrl: imageUrls[i] || null,   // ← storage URL (https://...) or null
+            audioUrl: audioUrls[i] || null    // ← base64 audio, only in response (not in DB)
+          }))
         ]
       }
     });
@@ -489,9 +512,9 @@ app.post("/regenerate-audio", async (req, res) => {
       pages.map(async (page, i) => {
         try {
           const url = await generateVoice(page.lines.join(" "), ageNum);
-          console.log("  Voice " + (i+1) + " done");
+          console.log("  Voice " + (i + 1) + " done");
           return url;
-        } catch (e) { console.error("  Voice " + (i+1) + " failed:", e.message); return null; }
+        } catch (e) { console.error("  Voice " + (i + 1) + " failed:", e.message); return null; }
       })
     );
     res.json({ audioUrls });
@@ -517,10 +540,10 @@ app.post("/webhook/lemonsqueezy", async (req, res) => {
     if (eventName === "subscription_created" || (eventName === "subscription_updated" && status === "active")) {
       const productName = payload.data?.attributes?.product_name || "";
       const plan = productName.toLowerCase().includes("plus") ? "family_plus" : "family";
-      await supabase.from("profiles").update({ 
-        subscription_status: "paid", 
+      await supabase.from("profiles").update({
+        subscription_status: "paid",
         plan: plan,
-        lemon_squeezy_customer_id: payload.data?.attributes?.customer_id?.toString() 
+        lemon_squeezy_customer_id: payload.data?.attributes?.customer_id?.toString()
       }).eq("email", customerEmail);
       console.log("Activated subscription for:", customerEmail, "plan:", plan);
     }
@@ -532,13 +555,12 @@ app.post("/webhook/lemonsqueezy", async (req, res) => {
   res.status(200).json({ received: true });
 });
 
-// ── Share story ──────────────────────────────────────────────────────────────
 app.post("/share-story", async (req, res) => {
   const { story, userId } = req.body;
   if (!story || !userId) return res.status(400).json({ error: "Missing story or userId" });
   try {
     const shareId = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-    // Strip audio (large) but keep images as base64
+    // FIX: pages already have storage URLs — strip audio only (large), keep imageUrl as-is
     const pages = story.pages.map(p => ({ ...p, audioUrl: null }));
     const { error } = await supabase.from("shared_stories").insert({
       id: shareId,
@@ -564,9 +586,7 @@ app.get("/share/:shareId", async (req, res) => {
   try {
     const { data, error } = await supabase.from("shared_stories").select("*").eq("id", shareId).single();
     if (error || !data) return res.status(404).json({ error: "Story not found or expired" });
-    // Check expiry
     if (new Date(data.expires_at) < new Date()) return res.status(410).json({ error: "This story has expired" });
-    // Increment views
     await supabase.from("shared_stories").update({ views: (data.views || 0) + 1 }).eq("id", shareId);
     res.json({ story: data });
   } catch (e) {
@@ -575,52 +595,39 @@ app.get("/share/:shareId", async (req, res) => {
   }
 });
 
-// ── PDF Export ───────────────────────────────────────────────────────────────
 app.post("/generate-pdf", async (req, res) => {
   const { story } = req.body;
   if (!story) return res.status(400).json({ error: "Missing story" });
   try {
     const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
     const fetch = (await import("node-fetch")).default;
-
     const pdfDoc = await PDFDocument.create();
     const titleFont = await pdfDoc.embedFont(StandardFonts.TimesRomanBoldItalic);
     const bodyFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
-    const pageWidth = 612, pageHeight = 792;
-    const margin = 48;
+    const pageWidth = 612, pageHeight = 792, margin = 48;
     const purple = rgb(0.49, 0.23, 0.93);
     const dark = rgb(0.1, 0.05, 0.2);
 
-    // Cover page
     const cover = pdfDoc.addPage([pageWidth, pageHeight]);
-    cover.drawRectangle({ x:0, y:0, width:pageWidth, height:pageHeight, color: rgb(0.05, 0.04, 0.12) });
-    cover.drawRectangle({ x:0, y:0, width:pageWidth, height:8, color: purple });
-    cover.drawRectangle({ x:0, y:pageHeight-8, width:pageWidth, height:8, color: purple });
-    const titleSize = 42;
+    cover.drawRectangle({ x: 0, y: 0, width: pageWidth, height: pageHeight, color: rgb(0.05, 0.04, 0.12) });
+    cover.drawRectangle({ x: 0, y: 0, width: pageWidth, height: 8, color: purple });
+    cover.drawRectangle({ x: 0, y: pageHeight - 8, width: pageWidth, height: 8, color: purple });
     const titleText = story.title || "A Dreamzy Story";
-    cover.drawText(titleText, { x: margin, y: pageHeight/2 + 60, size: titleSize, font: titleFont, color: rgb(1,1,1), maxWidth: pageWidth - margin*2 });
-    cover.drawText(`A story for ${story.childName}`, { x: margin, y: pageHeight/2 - 10, size: 22, font: bodyFont, color: rgb(0.68, 0.55, 1) });
+    cover.drawText(titleText, { x: margin, y: pageHeight / 2 + 60, size: 42, font: titleFont, color: rgb(1, 1, 1), maxWidth: pageWidth - margin * 2 });
+    cover.drawText(`A story for ${story.childName}`, { x: margin, y: pageHeight / 2 - 10, size: 22, font: bodyFont, color: rgb(0.68, 0.55, 1) });
     cover.drawText(`Made with Dreamzy *`, { x: margin, y: margin, size: 12, font: bodyFont, color: rgb(0.4, 0.35, 0.55) });
 
-    // Story pages
     for (let i = 0; i < story.pages.length; i++) {
       const page = story.pages[i];
       const p = pdfDoc.addPage([pageWidth, pageHeight]);
-
-      // Background
-      p.drawRectangle({ x:0, y:0, width:pageWidth, height:pageHeight, color: rgb(0.99, 0.97, 1) });
-
-      // Purple top bar
-      p.drawRectangle({ x:0, y:pageHeight-6, width:pageWidth, height:6, color: purple });
-
-      // Image — top half
+      p.drawRectangle({ x: 0, y: 0, width: pageWidth, height: pageHeight, color: rgb(0.99, 0.97, 1) });
+      p.drawRectangle({ x: 0, y: pageHeight - 6, width: pageWidth, height: 6, color: purple });
       const imgHeight = 340;
       if (page.imageUrl) {
         try {
           let imgData;
           if (page.imageUrl.startsWith("data:image")) {
-            const base64 = page.imageUrl.split(",")[1];
-            imgData = Buffer.from(base64, "base64");
+            imgData = Buffer.from(page.imageUrl.split(",")[1], "base64");
           } else {
             const r = await fetch(page.imageUrl);
             imgData = Buffer.from(await r.arrayBuffer());
@@ -629,51 +636,42 @@ app.post("/generate-pdf", async (req, res) => {
             ? await pdfDoc.embedPng(imgData).catch(() => pdfDoc.embedJpg(imgData))
             : await pdfDoc.embedJpg(imgData).catch(() => pdfDoc.embedPng(imgData));
           const imgY = pageHeight - imgHeight - 24;
-          p.drawImage(embedded, { x: margin, y: imgY, width: pageWidth - margin*2, height: imgHeight - 24 });
-        } catch(e) { console.log("Image embed failed:", e.message); }
+          p.drawImage(embedded, { x: margin, y: imgY, width: pageWidth - margin * 2, height: imgHeight - 24 });
+        } catch (e) { console.log("Image embed failed:", e.message); }
       }
-
-      // Divider
       const divY = pageHeight - imgHeight - 32;
-      p.drawLine({ start: {x: margin, y: divY}, end: {x: pageWidth - margin, y: divY}, thickness: 1, color: rgb(0.8, 0.75, 0.95) });
-
-      // Story text
+      p.drawLine({ start: { x: margin, y: divY }, end: { x: pageWidth - margin, y: divY }, thickness: 1, color: rgb(0.8, 0.75, 0.95) });
       const lines = page.lines || [];
       const text = lines.join(" ");
       const fontSize = 16;
       const lineHeight = fontSize * 1.6;
       const maxWidth = pageWidth - margin * 2;
-      // Word wrap
       const words = text.split(" ");
       const wrappedLines = [];
       let currentLine = "";
       for (const word of words) {
         const testLine = currentLine ? `${currentLine} ${word}` : word;
-        const w = bodyFont.widthOfTextAtSize(testLine, fontSize);
-        if (w > maxWidth && currentLine) { wrappedLines.push(currentLine); currentLine = word; }
-        else currentLine = testLine;
+        if (bodyFont.widthOfTextAtSize(testLine, fontSize) > maxWidth && currentLine) {
+          wrappedLines.push(currentLine); currentLine = word;
+        } else currentLine = testLine;
       }
       if (currentLine) wrappedLines.push(currentLine);
-
       let textY = divY - 28;
       for (const line of wrappedLines) {
         if (textY < margin + 40) break;
         p.drawText(line, { x: margin, y: textY, size: fontSize, font: bodyFont, color: dark });
         textY -= lineHeight;
       }
-
-      // Page number
-      p.drawText(`${i + 1}`, { x: pageWidth/2 - 6, y: margin - 10, size: 11, font: bodyFont, color: rgb(0.6, 0.55, 0.75) });
-      // Purple bottom bar
-      p.drawRectangle({ x:0, y:0, width:pageWidth, height:6, color: purple });
+      p.drawText(`${i + 1}`, { x: pageWidth / 2 - 6, y: margin - 10, size: 11, font: bodyFont, color: rgb(0.6, 0.55, 0.75) });
+      p.drawRectangle({ x: 0, y: 0, width: pageWidth, height: 6, color: purple });
     }
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="dreamzy-${(story.title||"story").replace(/[^a-z0-9]/gi,"-").toLowerCase()}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="dreamzy-${(story.title || "story").replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf"`);
     res.send(Buffer.from(pdfBytes));
     console.log("PDF generated:", story.title);
-  } catch(e) {
+  } catch (e) {
     console.error("PDF error:", e.message);
     res.status(500).json({ error: e.message });
   }
