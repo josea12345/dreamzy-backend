@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "narrator-v4" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "sfx-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -220,7 +220,7 @@ Return ONLY valid JSON with no markdown, no code blocks, no explanation before o
     "protagonist": "${childName} description",
     "supporting": ["character name and brief description", "another character"]
   },
-  "pages": [{"pageNumber":1,"lines":["line 1","line 2"],"illustrationPrompt":"Detailed scene description","soundNote":"reading tone"}]
+  "pages": [{"pageNumber":1,"lines":["line 1","line 2"],"illustrationPrompt":"Detailed scene description","soundNote":"reading tone"${ageNum <= 4 ? `,"tappable":{"emoji":"🐄","soundDescription":"a friendly cow mooing softly, short 1 second"}` : ''}}]
 }
 RULES:
 - Generate exactly ${ageStyle.pages} pages — no more, no less
@@ -238,7 +238,12 @@ RULES:
   * Include the EXACT setting from that page's story — each page should show a DIFFERENT scene
   * Describe the EMOTION on the character's face — surprised, delighted, determined, curious
   * Always include lighting/atmosphere: warm sunset, cozy candlelight, bright sunny meadow, misty morning
-  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.
+  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.${ageNum <= 4 ? `
+- TAPPABLE ELEMENTS — for each page include ONE tappable element that fits the scene naturally:
+  * emoji: a single emoji representing the tappable object (animal, vehicle, instrument, nature element)
+  * soundDescription: a short vivid description for sound generation, e.g. "a duck quacking twice, cheerful and soft" or "a tiny bell ringing once, bright and clear" or "rain drops falling on leaves, gentle pitter patter"
+  * Pick something that actually APPEARS in the illustration — not random
+  * Keep sounds short (1-2 seconds), child-friendly, and joyful` : ""}
 - storySummary MUST capture key events and characters for future episodes.`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
@@ -392,7 +397,25 @@ async function generateVoice(text, ageNum, language, narratorKey, attempt) {
   }
 }
 
-// ── Email ────────────────────────────────────────────────────────────────────
+async function generateSoundEffect(description, attempt) {
+  if (attempt === undefined) attempt = 0;
+  try {
+    const r = await axios.post(
+      "https://api.elevenlabs.io/v1/sound-generation",
+      { text: description, duration_seconds: 1.5, prompt_influence: 0.4 },
+      { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
+    );
+    return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 429 && attempt < 2) {
+      await sleep(15000);
+      return generateSoundEffect(description, attempt + 1);
+    }
+    console.error("  Sound effect failed:", e.message);
+    return null;
+  }
+}
 async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
   try {
     await resend.emails.send({
@@ -564,6 +587,23 @@ app.post("/generate-full-story", async (req, res) => {
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
 
+    // ── Sound effects (ages 2-4 only) ────────────────────────────────────────
+    const soundEffectUrls = [];
+    if (ageNum <= 4) {
+      console.log("Generating sound effects for toddler story...");
+      for (let i = 0; i < storyData.pages.length; i++) {
+        const tappable = storyData.pages[i].tappable;
+        if (tappable?.soundDescription) {
+          await sleep(300);
+          const sfx = await generateSoundEffect(tappable.soundDescription);
+          soundEffectUrls.push(sfx);
+          console.log("  SFX " + (i + 1) + " done: " + tappable.emoji);
+        } else {
+          soundEffectUrls.push(null);
+        }
+      }
+    }
+
     // ── Build final pages array ──────────────────────────────────────────────
     // imageUrl is a storage URL (https://...) or null — NEVER base64
     // audioUrl is a base64 data URI (not stored in DB, only sent to client)
@@ -611,7 +651,8 @@ app.post("/generate-full-story", async (req, res) => {
           ...storyData.pages.map((p, i) => ({
             ...p,
             imageUrl: imageUrls[i] || null,
-            audioUrl: audioUrls[i] || null
+            audioUrl: audioUrls[i] || null,
+            tappable: p.tappable ? { ...p.tappable, soundUrl: soundEffectUrls[i] || null } : null,
           }))
         ]
       }
