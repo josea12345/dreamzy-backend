@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "sfx-v3" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "story-quality-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -75,30 +75,31 @@ WHAT MAKES GREAT BOOKS FOR 3-4 YEAR OLDS — use ALL of these:
     style: `STYLE: Ages 4-5. Draw from these masters: Mo Willems (Don't Let the Pigeon!), Julia Donaldson, Dav Pilkey, Oliver Jeffers, Adam Rubin (Dragons Love Tacos), Robert Munsch.
 
 WHAT MAKES GREAT BOOKS FOR 4-5 YEAR OLDS — use ALL of these:
-- ACTUAL PLOT: beginning → clear problem → escalating attempts → surprising resolution. Kids this age can follow a full story arc.
-- HUMOR & CHAOS: big silly energy. Characters who overreact. Absurd situations. Dav Pilkey chaos. Things going hilariously wrong.
-- INTERACTIVE VOICE: speak directly to the reader. "Don't turn the page!" / "You won't believe what happened next." / "Can you help?" Break the fourth wall.
-- RECOGNIZABLE CHARACTERS: give the character a strong personality — greedy, dramatic, brave, clumsy. Characters matter as much as plot now.
-- DIALOGUE-DRIVEN: most of the storytelling happens through speech. Short punchy exchanges. Funny misunderstandings.
-- PARTICIPATION: write moments where kids want to shout back at the story, warn the character, or join in.
-- 2-3 lines per page. Up to 10 words per line. Varied rhythm — some short punchy, some longer.
-- SERIES FEEL: hint that this character will have MORE adventures. Leave them wanting more.
-- MODEL LINES: "The pigeon REALLY wants to drive the bus." / "Oh no. Oh no no no." / "That is the funniest thing I have EVER seen." / "To be continued... (just kidding. Or am I?)"`,
+- ACTUAL PLOT: beginning → clear problem → escalating attempts → surprising resolution. Kids this age can follow a full story arc. Every page must move the plot forward — not just describe.
+- HUMOR & CHAOS: big silly energy. Characters who overreact. Absurd situations. Things going hilariously wrong in specific, visual ways.
+- INTERACTIVE VOICE: speak directly to the reader. "Don't turn the page!" / "You won't believe what happened next." / "Can you help?" Break the fourth wall once per story for maximum impact.
+- STRONG CHARACTER PERSONALITY: give the main character one defining trait (greedy, dramatic, brave, clumsy) and let it drive every decision they make. Their personality IS the plot.
+- DIALOGUE-DRIVEN: most of the storytelling through speech. Short punchy exchanges. Funny misunderstandings that the reader can see coming before the character does.
+- 2-3 lines per page. Up to 10 words per line. Varied rhythm — short punchy lines followed by one longer revelation.
+- CAUSE AND EFFECT CHAIN: each page action directly causes the next. If you can remove a page without affecting the story, rewrite it.
+- SATISFYING CALLBACK: the ending must echo something from page 1 — a repeated phrase, a returned object, a reversed situation.
+- MODEL LINES: "The pigeon REALLY wants to drive the bus." / "Oh no. Oh no no no." / "That is the funniest thing I have EVER seen." / "And that's when things got very, very weird."`,
   };
   return {
     range: "5-10", pages: pageCountOverride || 7,
     style: `STYLE: Ages 5-10. Draw from these masters: Roald Dahl, Mary Pope Osborne (Magic Tree House), Arnold Lobel (Frog & Toad), Beverly Cleary, Jeff Kinney (tone), Kate DiCamillo.
 
 WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
-- STRONG NARRATIVE ARC: clear setup → rising tension → climax → satisfying resolution. Every page moves the plot forward.
-- CHARACTER GROWTH: the hero must change, learn, or overcome something real by the end. Growth feels EARNED.
-- REAL CONFLICT: a genuine problem the child must solve using cleverness, courage, or kindness — not luck.
-- WIT & HUMOR: jokes kids feel SMART for understanding. Irony, wordplay, characters who are funny because they're flawed.
-- VARIED sentences: short punchy lines mixed with longer descriptive ones. 3-5 lines per page, up to 14 words.
-- VIVID details: specific sensory details that paint a picture. Not "a big tree" — "a tree so tall its top was hidden in clouds."
-- FRIENDSHIP & STAKES: the hero should care about someone else. What they risk losing matters.
-- THE CHILD'S INTERESTS drive the plot — interests are not decoration, they ARE the adventure.
-- DIALOGUE that reveals character — how people talk tells us who they are.
+- STRONG NARRATIVE ARC: clear setup → rising tension → climax → satisfying resolution. Every single page must move the plot or character forward. If a page doesn't do either — cut it.
+- CHARACTER GROWTH: the hero must be different on the last page than the first. The change must feel EARNED through what they experienced — not stated, shown.
+- REAL CONFLICT with genuine stakes: something the child actually cares about could be lost. The problem must matter emotionally, not just logically.
+- WIT & HUMOR: jokes kids feel SMART for understanding. Irony, wordplay, characters who are funny because they're flawed in specific recognizable ways.
+- VARIED sentences: short punchy lines mixed with longer descriptive ones. 3-5 lines per page, up to 14 words. Never two identical sentence structures in a row.
+- VIVID SPECIFIC details: not "a big tree" but "a tree so old its roots had swallowed the garden wall." Not "she was scared" but "her hands wouldn't stop shaking."
+- FRIENDSHIP & STAKES: the hero must care about someone else. What they risk losing must involve that relationship.
+- THE CHILD'S INTERESTS drive the plot — interests are not decoration, they ARE the adventure. If the interest is dinosaurs, the solution to the problem involves dinosaur knowledge.
+- DIALOGUE reveals character — how people talk tells us who they are. Each character should sound distinct.
+- OPEN WORLD: hint at more adventures to come. Leave something unresolved or a new door opened.
 - MODEL LINES: "James had never seen such a thing in all his life." / "Frog and Toad were friends." / "The Magic Tree House began to spin." / "Something amazing was about to happen."`,
   };
 }
@@ -129,59 +130,70 @@ async function generateStoryWithRetry(childName, age, interests, theme, mood, pr
 // Build a page-by-page blueprint so the AI knows exactly what each page must accomplish.
 // This is the core fix for truncated arcs — without this, the AI invents its own pacing
 // and consistently runs out of pages before resolving the conflict.
-function getPageBlueprint(pageCount) {
+function getPageBlueprint(pageCount, childName) {
   if (pageCount <= 5) return `
 PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
-  Page 1: WORLD & CHARACTER — introduce the hero in their world. Establish the setting and mood. Drop a small hint of what's coming.
-  Page 2: THE PROBLEM APPEARS — the challenge, wish, or quest becomes clear. The hero decides to act.
-  Page 3: THE ATTEMPT & COMPLICATION — the hero tries something. It doesn't fully work, or something unexpected happens. Tension rises.
-  Page 4: THE RESOLUTION — the hero figures it out and solves the problem. This is the climax. Show it happening, don't skip it.
-  Page 5: THE WARM ENDING — aftermath. The hero feels the joy of what they accomplished. A quiet, satisfied, warm final moment.
+  Page 1: WORLD & CHARACTER — introduce ${childName || "the hero"} in ONE specific place (a bedroom, a garden, a kitchen). Show them doing something they love. The final line hints at the story's problem or wish.
+  Page 2: THE PROBLEM APPEARS — the specific challenge becomes clear. ${childName || "The hero"} wants or needs something, or something goes wrong. They decide to do something about it.
+  Page 3: THE ATTEMPT & COMPLICATION — ${childName || "the hero"} tries ONE clear action. Something unexpected or funny happens as a result. The situation is now more interesting.
+  Page 4: THE RESOLUTION — ${childName || "the hero"} solves the problem with a clever or surprising action. This is the emotional peak. Show it fully — don't rush past it.
+  Page 5: THE WARM ENDING — same location as page 1 (full circle). ${childName || "The hero"} feels the joy of what they did. A cozy, warm, satisfied final image.
 
-CRITICAL: The problem MUST be solved on page 4, not page 5. Page 5 is purely the warm emotional landing — never the moment of resolution.`;
+CRITICAL: Every page must directly connect to the one before it. Page 3 happens BECAUSE of page 2. Page 4 happens BECAUSE of page 3. No scene can exist in isolation.
+CRITICAL: The problem MUST be solved on page 4. Page 5 is only the warm landing — never the moment of resolution.
+CRITICAL: The same ${childName || "hero"} and same world must appear on every single page. No new locations unless they connect directly to the previous page.`;
 
   if (pageCount <= 6) return `
 PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
-  Page 1: WORLD & CHARACTER — introduce the hero in their world. Establish mood and setting vividly.
-  Page 2: THE PROBLEM APPEARS — the challenge or quest becomes clear. The hero decides to act.
-  Page 3: FIRST ATTEMPT — the hero tries something bold. A small success or an unexpected complication.
-  Page 4: THE REAL CHALLENGE — the hardest moment. Things look uncertain. The hero must dig deep.
-  Page 5: THE RESOLUTION — the hero solves it. Show this moment in full — the triumph must be seen.
-  Page 6: THE WARM ENDING — quiet aftermath. Joy, connection, satisfaction. A gentle close.
+  Page 1: WORLD & CHARACTER — introduce ${childName||"the hero"} in a vivid specific setting. Establish their personality in one action. Plant the seed of the story's problem or desire clearly.
+  Page 2: THE PROBLEM APPEARS — the specific challenge becomes undeniable. ${childName||"The hero"} makes a clear decision to act. The reader knows exactly what ${childName||"the hero"} wants and why.
+  Page 3: FIRST ATTEMPT — ${childName||"the hero"} tries something bold and specific. A small success that creates a new complication, OR a funny/surprising failure that raises the stakes.
+  Page 4: THE REAL CHALLENGE — the hardest moment. Something meaningful is at stake. ${childName||"The hero"} must dig deeper or think differently. The outcome feels genuinely uncertain.
+  Page 5: THE RESOLUTION — ${childName||"the hero"} solves it with cleverness, courage, or kindness. Show this moment in full — the triumph must be seen and felt, not summarized.
+  Page 6: THE WARM ENDING — emotional aftermath. ${childName||"The hero"} reflects or celebrates. A specific sensory detail closes the story warmly. Echoes something from page 1.
 
-CRITICAL: Resolution happens on page 5. Page 6 is the emotional landing only — never the climax.`;
+CRITICAL: Every page causes the next. Page 3 happens BECAUSE of page 2. Page 4 BECAUSE of 3. No isolated vignettes.
+CRITICAL: Resolution on page 5. Page 6 is landing only — never the climax.
+CRITICAL: ${childName||"The hero"} must appear on every page actively doing something — never just observing.`;
 
   if (pageCount <= 8) return `
 PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
-  Page 1: WORLD & CHARACTER — hero in their world, vivid setting, hint of what's to come.
-  Page 2: THE INCITING MOMENT — something happens that sets the adventure in motion.
-  Page 3: THE GOAL IS SET — hero commits to the quest. First steps taken.
-  Page 4: FIRST OBSTACLE — something goes wrong or gets complicated. Hero adapts.
-  Page 5: DEEPENING STAKES — the challenge grows. A friend helps, or a new discovery changes things.
-  Page 6: THE DARKEST MOMENT — it seems like the hero might not succeed.
-  Page 7: THE RESOLUTION — hero solves the problem. The triumphant moment. Show it fully.
-  Page 8: THE WARM ENDING — quiet joy, connection, satisfaction. The emotional landing.
+  Page 1: OPENING IMAGE — ${childName||"the hero"} in their world. One vivid sensory detail. Their personality shown through action, not description. A hint of the story ahead.
+  Page 2: THE INCITING INCIDENT — something specific happens that disrupts the normal world. ${childName||"The hero"} can't ignore it.
+  Page 3: THE GOAL IS SET — ${childName||"the hero"} commits to solving the problem or pursuing the quest. First concrete steps taken. The reader knows exactly what success looks like.
+  Page 4: FIRST OBSTACLE — something goes wrong in a specific, surprising way. ${childName||"The hero"} adapts but the problem isn't solved.
+  Page 5: DEEPENING STAKES — the challenge grows more serious or personal. A friend helps, or a discovery changes what ${childName||"the hero"} thought they knew.
+  Page 6: THE DARKEST MOMENT — it genuinely seems like ${childName||"the hero"} might fail. Something important is at stake. The reader worries.
+  Page 7: THE RESOLUTION — ${childName||"the hero"} uses everything they've learned or a clever insight to solve the problem. Show every beat of this moment — don't summarize it.
+  Page 8: THE WARM ENDING — quiet specific joy. A callback to page 1. Something has changed in ${childName||"the hero"} or their world. Emotionally satisfying close.
 
-CRITICAL: Climax on page 7. Page 8 is warm aftermath only.`;
+CRITICAL: Climax on page 7. Page 8 is warm aftermath only — never the resolution.
+CRITICAL: Every page must directly cause the next. Trace the chain: page 2 causes page 3 causes page 4... If any page could be removed without affecting the next, rewrite it.
+CRITICAL: ${childName||"The hero"} must be active on every page — making decisions, taking actions, reacting specifically. Never passive.`;
 
-  // 9–16 pages: use proportional thirds
+  // 9–16 pages: proportional thirds with named hero
   const setupEnd = Math.floor(pageCount * 0.25);
+  const midpointPage = Math.floor(pageCount * 0.5);
   const climaxPage = pageCount - 1;
   return `
 PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint:
-  Pages 1–${setupEnd}: SETUP — introduce hero, world, and the problem or quest.
-  Pages ${setupEnd+1}–${climaxPage-1}: RISING ACTION — attempts, complications, escalating stakes, allies and obstacles.
-  Page ${climaxPage}: THE RESOLUTION — the hero solves the main problem. Show the moment fully. This is the climax.
-  Page ${pageCount}: WARM ENDING — quiet aftermath, joy, connection. Emotional landing only — not the climax.
+  Pages 1–${setupEnd}: SETUP — introduce ${childName||"the hero"}, their world, their want, and the problem. End with a clear inciting incident that launches the story.
+  Pages ${setupEnd+1}–${midpointPage}: RISING ACTION — ${childName||"the hero"} pursues the goal. Each attempt creates a new complication. Allies are introduced. Stakes escalate.
+  Page ${midpointPage}: MIDPOINT TURN — something changes the story's direction. A discovery, betrayal, or revelation that raises stakes significantly.
+  Pages ${midpointPage+1}–${climaxPage-1}: COMPLICATIONS — the hardest stretch. ${childName||"the hero"} faces their biggest doubts. A dark moment where failure seems possible.
+  Page ${climaxPage}: THE RESOLUTION — ${childName||"the hero"} solves the main problem using something earned through the story. Show it fully. This is the climax.
+  Page ${pageCount}: WARM ENDING — specific quiet joy. A changed world or changed ${childName||"hero"}. Echoes the opening. Leaves the reader satisfied.
 
-CRITICAL: The conflict must be fully resolved by page ${climaxPage}. Page ${pageCount} is the warm emotional close only.`;
+CRITICAL: The conflict must be fully resolved by page ${climaxPage}. Page ${pageCount} is the warm emotional close only.
+CRITICAL: Every page must earn its place. Ask for each page: "what does this reveal, raise, or change?" If nothing — rewrite it.
+CRITICAL: ${childName||"The hero"}'s internal growth must mirror the external plot. By page ${pageCount} they are different from page 1.`;
 }
 
 async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
-  const pageBlueprint = getPageBlueprint(ageStyle.pages);
+  const pageBlueprint = getPageBlueprint(ageStyle.pages, childName);
   const lang = LANGUAGE_CONFIG[language] || LANGUAGE_CONFIG.en;
   const languageInstruction = lang.instruction
     ? `\nLANGUAGE: ${lang.instruction}\nCRITICAL: The "illustrationPrompt" field must ALWAYS be written in English — it is used for image generation only and must never be translated.`
@@ -228,17 +240,26 @@ RULES:
 - Use ${childName}'s name naturally — not on every single line, just when it feels right
 - INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON: Weave "${lesson}" into the story organically — through what happens, not through characters saying it out loud.` : ""}
-- NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible". Use simple direct language. Show don't tell.
-- EVERY sentence must sound natural when read aloud to a child. If it sounds like a school essay, rewrite it.
-- PACING CHECK: Before writing page N, ask yourself — "have I already shown the resolution?" If yes and this is the last page, write the warm landing. If no and this is the second-to-last page, this page MUST contain the resolution.
+- NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible", "joyfully", "beautifully", "amazing". Use simple direct language. Show don't tell.
+- EVERY sentence must sound natural when read aloud to a child. Test each line: would a parent read it naturally to a sleepy child? If not, rewrite it.
+- CAUSE & EFFECT: before writing each page, ask "what happened on the previous page that makes THIS page happen?" If the answer is "nothing" — rewrite the page. Every page must be caused by the previous one.
+- PAGE VALUE TEST: for every page ask "does this page move the plot OR deepen the character?" If neither — cut it and redistribute that content.
+- PACING CHECK: Before writing page N, ask yourself — "have I already shown the resolution?" If yes and this is the last page, write the warm landing. If no and this is the second-to-last page, this page MUST contain the resolution.${ageNum <= 4 ? `
+- TODDLER STORY CONSISTENCY — this is critical for ages ${ageNum} and under:
+  * ONE CLEAR PLOT THREAD: Decide the single story in one sentence before writing page 1. Every page must advance THAT story. Example: "${childName} loses their toy giraffe and searches for it." Each page = one step in that search. Never introduce unrelated events.
+  * SAME LOCATION FAMILY: the story should stay in 1-2 connected locations (home + garden, bedroom + living room). No teleporting to new worlds each page.
+  * REPEAT THE HERO: ${childName} must appear on EVERY page doing something related to the plot. Never disappear for a page.
+  * EMOTIONAL THROUGHLINE: establish one feeling on page 1 (excited, worried, curious) and resolve it by the last page. Every page moves toward that resolution.
+  * CAUSE AND EFFECT: each page's action must directly cause what happens on the next page. Page 2 happens BECAUSE of page 1.` : ""}
 - ILLUSTRATION PROMPTS — this is critical for visual consistency:
   * Every illustrationPrompt MUST follow this exact format: "[CHARACTER DESCRIPTION] is [DOING WHAT] in/at [SPECIFIC LOCATION]. [SUPPORTING CHARACTERS if any]. [MOOD/LIGHTING]. [KEY VISUAL DETAILS]."
   * Example: "A girl with curly red hair, green eyes, yellow raincoat is climbing a giant mushroom in an enchanted forest. A small blue rabbit watches from below. Warm golden light. Magical and whimsical."
   * Be SPECIFIC about the action — not "standing in a forest" but "running through tall purple mushrooms, arms outstretched"
-  * Include the EXACT setting from that page's story — each page should show a DIFFERENT scene
+  * Include the EXACT setting from that page's story — each page should show a DIFFERENT scene within the SAME world
   * Describe the EMOTION on the character's face — surprised, delighted, determined, curious
   * Always include lighting/atmosphere: warm sunset, cozy candlelight, bright sunny meadow, misty morning
-  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.${isFamilyPlus && ageNum <= 4 ? `
+  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.
+  * LOCK THE VISUAL WORLD: on page 1, define the color palette and art style. Every subsequent illustrationPrompt must reference the same colors, textures, and visual elements to maintain consistency.${isFamilyPlus && ageNum <= 4 ? `
 - TAPPABLE ELEMENTS — for each page include ONE tappable element that fits the scene naturally:
   * emoji: a single emoji representing the tappable object (animal, vehicle, instrument, nature element)
   * soundDescription: a short vivid description for sound generation, e.g. "a duck quacking twice, cheerful and soft" or "a tiny bell ringing once, bright and clear" or "rain drops falling on leaves, gentle pitter patter"
