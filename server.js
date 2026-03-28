@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "story-quality-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "story-quality-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -105,7 +105,7 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
 }
 
 const LANGUAGE_CONFIG = {
-  en:    { name: "English",                  coverPhrase: "A story for",         instruction: "",                                                                                                                         sleepWords: /\b(sleep|slumber|yawn|dreamed|dreamt|drift|drifted|doze|dozed|snooze|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime)\b/i },
+  en:    { name: "English",                  coverPhrase: "A story for",         instruction: "",                                                                                                                         sleepWords: /\b(sleep|sleeping|slept|slumber|yawn|yawning|dream|dreaming|dreamed|dreamt|drift|drifting|drifted|doze|dozing|dozed|snooze|snoozing|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime|tucked in|tuck(ed)? in|rest(ed)?|nap|napping)\b/i },
   es_es: { name: "Spanish (Spain)",          coverPhrase: "Un cuento para",      instruction: "Write the ENTIRE story in Spanish from Spain (Castilian). Use vocabulary, expressions and grammar natural to Spain. Do NOT use Latin American Spanish variants.",  sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
   es_la: { name: "Spanish (Latin America)",  coverPhrase: "Un cuento para",      instruction: "Write the ENTIRE story in Latin American Spanish. Use vocabulary, expressions and grammar natural to Latin America (not Spain). Avoid Castilian-specific terms.", sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
   fr:    { name: "French",                   coverPhrase: "Une histoire pour",   instruction: "Write the ENTIRE story in French. Use vocabulary and expressions natural to France.",                                      sleepWords: /\b(dormir|sommeil|bâiller|rêvé|s'endormir|fermé les yeux|bonne nuit)\b/i },
@@ -265,7 +265,7 @@ RULES:
   * soundDescription: a short vivid description for sound generation, e.g. "a duck quacking twice, cheerful and soft" or "a tiny bell ringing once, bright and clear" or "rain drops falling on leaves, gentle pitter patter"
   * Pick something that actually APPEARS in the illustration — not random
   * Keep sounds short (1-2 seconds), child-friendly, and joyful` : ""}
-- storySummary MUST capture key events and characters for future episodes.`,
+- ENDING RULE: The story must NEVER end with the child sleeping, drifting off, closing their eyes, being tucked in, or any form of rest. It ends with joy, triumph, warmth, or satisfaction — awake and happy.`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
 
@@ -291,13 +291,13 @@ function improveEnding(finalPage, childName, theme, ageNum, language) {
   if (!lang.sleepWords.test(lastLines)) return finalPage;
   // Only fires when the ending literally has the child falling asleep
   const endings = [
-    [`${childName} laughs and cheers — what an adventure!`, `"Let's do it again!" ${childName} says with a grin.`],
-    [`The sun paints the sky gold and pink.`, `${childName} smiles — today was absolutely perfect.`],
+    [`${childName} laughs and cheers. What an adventure!`, `"Let's do it again!" ${childName} says with a grin.`],
+    [`The sun paints the sky gold and pink.`, `${childName} smiles. Today was absolutely perfect.`],
     [`${childName} hugs their new friend so tight.`, `Some days are pure magic. This was one.`],
     [`"Best adventure EVER!" ${childName} grins wide.`, `Tomorrow holds even more wonders to find.`],
     [`${childName} looks up at the first twinkling star.`, `Heart full and happy, the world feels wonderful.`],
     [`Hand in hand, they skip toward home.`, `${childName} cannot wait to come back.`],
-    [`"We did it!" ${childName} shouts with joy.`, `The whole world heard — and cheered along.`],
+    [`"We did it!" ${childName} shouts with joy.`, `The whole world heard and cheered along.`],
     [`${childName} takes a deep breath of evening air.`, `Everything feels just right in the whole wide world.`],
   ];
   const picked = endings[Math.floor(Math.random() * endings.length)];
