@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "narrator-v3" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "narrator-v4" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -210,7 +210,7 @@ ${ageStyle.style}
 ${pageBlueprint}
 ${languageInstruction}
 ${continuationContext}
-Return ONLY valid JSON:
+Return ONLY valid JSON with no markdown, no code blocks, no explanation before or after:
 {
   "title": "Catchy episode title featuring ${childName}",
   "ageRange": "${ageStyle.range}",
@@ -244,9 +244,18 @@ RULES:
   });
 
   const text = response.content.map(b => b.text || "").join("");
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("No JSON found");
-  return JSON.parse(match[0]);
+  // Strip markdown code blocks if Claude wrapped the JSON
+  const cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("No JSON found in response");
+  try {
+    return JSON.parse(match[0]);
+  } catch(e) {
+    // Try to extract just the valid JSON portion
+    const lastBrace = match[0].lastIndexOf("}");
+    const trimmed = match[0].slice(0, lastBrace + 1);
+    return JSON.parse(trimmed);
+  }
 }
 
 // Only replace the final page if it contains sleep words — never replace a good resolution
