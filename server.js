@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "sfx-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "sfx-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -112,15 +112,15 @@ const LANGUAGE_CONFIG = {
   de:    { name: "German",                   coverPhrase: "Eine Geschichte für", instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
 };
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus);
   } catch (e) {
     if ((e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, attempt + 1);
     }
     throw e;
   }
@@ -177,7 +177,7 @@ PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blue
 CRITICAL: The conflict must be fully resolved by page ${climaxPage}. Page ${pageCount} is the warm emotional close only.`;
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -220,7 +220,7 @@ Return ONLY valid JSON with no markdown, no code blocks, no explanation before o
     "protagonist": "${childName} description",
     "supporting": ["character name and brief description", "another character"]
   },
-  "pages": [{"pageNumber":1,"lines":["line 1","line 2"],"illustrationPrompt":"Detailed scene description","soundNote":"reading tone"${ageNum <= 4 ? `,"tappable":{"emoji":"🐄","soundDescription":"a friendly cow mooing softly, short 1 second"}` : ''}}]
+  "pages": [{"pageNumber":1,"lines":["line 1","line 2"],"illustrationPrompt":"Detailed scene description","soundNote":"reading tone"${isFamilyPlus && ageNum <= 4 ? `,"tappable":{"emoji":"🐄","soundDescription":"a friendly cow mooing softly, short 1 second"}` : ''}}]
 }
 RULES:
 - Generate exactly ${ageStyle.pages} pages — no more, no less
@@ -238,7 +238,7 @@ RULES:
   * Include the EXACT setting from that page's story — each page should show a DIFFERENT scene
   * Describe the EMOTION on the character's face — surprised, delighted, determined, curious
   * Always include lighting/atmosphere: warm sunset, cozy candlelight, bright sunny meadow, misty morning
-  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.${ageNum <= 4 ? `
+  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.${isFamilyPlus && ageNum <= 4 ? `
 - TAPPABLE ELEMENTS — for each page include ONE tappable element that fits the scene naturally:
   * emoji: a single emoji representing the tappable object (animal, vehicle, instrument, nature element)
   * soundDescription: a short vivid description for sound generation, e.g. "a duck quacking twice, cheerful and soft" or "a tiny bell ringing once, bright and clear" or "rain drops falling on leaves, gentle pitter patter"
@@ -466,11 +466,12 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language, narrator } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language, narrator, plan } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   const lang = language || "en";
   const narratorKey = narrator || DEFAULT_NARRATOR;
-  console.log("Using illustration style:", imgStyle, "| Language:", lang, "| Narrator:", narratorKey);
+  const isFamilyPlus = plan === "family_plus";
+  console.log("Using illustration style:", imgStyle, "| Language:", lang, "| Narrator:", narratorKey, "| Plan:", plan);
   if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
   if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
   const ageNum = parseInt(age) || 5;
@@ -501,7 +502,7 @@ app.post("/generate-full-story", async (req, res) => {
       }
     };
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus);
     await updateProgress(15, "generating");
 
     if (appearance && appearance.trim()) {
@@ -589,7 +590,7 @@ app.post("/generate-full-story", async (req, res) => {
 
     // ── Sound effects (ages 2-4 only) ────────────────────────────────────────
     const soundEffectUrls = [];
-    if (ageNum <= 4) {
+    if (ageNum <= 4 && isFamilyPlus) {
       console.log("Generating sound effects for toddler story...");
       for (let i = 0; i < storyData.pages.length; i++) {
         const tappable = storyData.pages[i].tappable;
