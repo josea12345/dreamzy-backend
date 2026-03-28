@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "sfx-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "sfx-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -683,6 +683,32 @@ app.post("/regenerate-audio", async (req, res) => {
     res.json({ audioUrls });
   } catch (e) {
     console.error("Regenerate audio error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/regenerate-sfx", async (req, res) => {
+  const { pages, age } = req.body;
+  const ageNum = parseInt(age) || 5;
+  if (ageNum > 4) return res.json({ sfxUrls: [] });
+  if (!pages?.length) return res.status(400).json({ error: "No pages" });
+  try {
+    console.log("Regenerating sound effects for " + pages.length + " pages...");
+    const sfxUrls = [];
+    for (let i = 0; i < pages.length; i++) {
+      const tappable = pages[i].tappable;
+      if (tappable?.soundDescription) {
+        await sleep(300);
+        const sfx = await generateSoundEffect(tappable.soundDescription);
+        sfxUrls.push(sfx);
+        console.log("  SFX " + (i + 1) + " done: " + tappable.emoji);
+      } else {
+        sfxUrls.push(null);
+      }
+    }
+    res.json({ sfxUrls });
+  } catch (e) {
+    console.error("Regenerate sfx error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
