@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v4" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v5" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -328,28 +328,33 @@ async function generateImage(prompt, characterDescription, style, attempt) {
   }
 }
 
-async function generateVoice(text, ageNum, attempt) {
+// ElevenLabs language codes for eleven_turbo_v2_5
+const ELEVENLABS_LANG_CODES = {
+  en: "en", es_es: "es", es_la: "es", fr: "fr", pt: "pt", de: "de"
+};
+
+async function generateVoice(text, ageNum, language, attempt) {
   if (attempt === undefined) attempt = 0;
   const voiceSettings = ageNum <= 3
     ? { stability: 0.80, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
     : ageNum <= 5
     ? { stability: 0.65, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true }
     : { stability: 0.55, similarity_boost: 0.80, style: 0.35, use_speaker_boost: true };
+  const languageCode = ELEVENLABS_LANG_CODES[language] || "en";
   try {
     const r = await axios.post(
       "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
-      { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings },
+      { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings, language_code: languageCode },
       { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
     );
     return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
   } catch (e) {
     const status = e.response?.status;
     if (status === 429 && attempt < 3) {
-      // ElevenLabs rate limit — back off significantly
       const waitSec = [15, 30, 60][attempt];
       console.log("  ElevenLabs rate limited, waiting " + waitSec + "s (attempt " + (attempt+1) + ")...");
       await sleep(waitSec * 1000);
-      return generateVoice(text, ageNum, attempt + 1);
+      return generateVoice(text, ageNum, language, attempt + 1);
     }
     throw e;
   }
@@ -476,7 +481,7 @@ app.post("/generate-full-story", async (req, res) => {
     let coverAudioUrl = null;
     try {
       const coverText = `${storyData.title}. ${lang.coverPhrase} ${childName}.`;
-      coverAudioUrl = await generateVoice(coverText, ageNum);
+      coverAudioUrl = await generateVoice(coverText, ageNum, lang);
     } catch (e) {
       console.error("  Cover audio failed:", e.message);
     }
@@ -512,7 +517,7 @@ app.post("/generate-full-story", async (req, res) => {
       if (i > 0) await sleep(300);
       let result = null;
       try {
-        result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum);
+        result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum, lang);
         console.log("  Voice " + (i + 1) + "/" + storyData.pages.length + " done");
       } catch (e) {
         console.error("  Voice " + (i + 1) + " failed after retries:", e.message);
@@ -584,15 +589,16 @@ app.post("/generate-full-story", async (req, res) => {
 });
 
 app.post("/regenerate-audio", async (req, res) => {
-  const { pages, age } = req.body;
+  const { pages, age, language } = req.body;
   if (!pages?.length) return res.status(400).json({ error: "No pages" });
   const ageNum = parseInt(age) || 5;
+  const lang = language || "en";
   try {
-    console.log("Regenerating audio for " + pages.length + " pages...");
+    console.log("Regenerating audio for " + pages.length + " pages (lang: " + lang + ")...");
     const audioUrls = await Promise.all(
       pages.map(async (page, i) => {
         try {
-          const url = await generateVoice(page.lines.join(" "), ageNum);
+          const url = await generateVoice(page.lines.join(" "), ageNum, lang);
           console.log("  Voice " + (i + 1) + " done");
           return url;
         } catch (e) { console.error("  Voice " + (i + 1) + " failed:", e.message); return null; }
