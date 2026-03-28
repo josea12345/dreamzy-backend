@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "narrator-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "narrator-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -336,28 +336,38 @@ const ELEVENLABS_LANG_CODES = {
 
 // Premade ElevenLabs voices — available to all users by default
 const NARRATORS = {
-  rachel:  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",  desc: "Warm & calm",      gender: "female" },
-  matilda: { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", desc: "Gentle & friendly", gender: "female" },
-  aria:    { id: "9BWtsMINqrJLrRacOk9x", name: "Aria",    desc: "Soft & expressive",  gender: "female" },
-  charlotte:{ id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "Soothing & rich", gender: "female" },
-  bill:    { id: "pqHfZKP75CvOlQylNhV4", name: "Bill",    desc: "Warm & deep",        gender: "male"   },
-  callum:  { id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum",  desc: "Fun & energetic",   gender: "male"   },
+  rachel:   { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",   desc: "Warm & calm",      gender: "female" },
+  matilda:  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda",  desc: "Gentle & friendly", gender: "female" },
+  aria:     { id: "9BWtsMINqrJLrRacOk9x", name: "Aria",     desc: "Soft & expressive",  gender: "female" },
+  charlotte:{ id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte",desc: "Soothing & rich",   gender: "female" },
+  bill:     { id: "pqHfZKP75CvOlQylNhV4", name: "Bill",     desc: "Warm & deep",        gender: "male"   },
+  callum:   { id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum",   desc: "Fun & energetic",    gender: "male"   },
 };
 const DEFAULT_NARRATOR = "rachel";
+
+// eleven_multilingual_v2 handles non-English much better than turbo
+// Use multilingual for any non-English language, turbo for English
+function getModelForLanguage(language) {
+  return language === "en" ? "eleven_turbo_v2_5" : "eleven_multilingual_v2";
+}
 
 async function generateVoice(text, ageNum, language, narratorKey, attempt) {
   if (attempt === undefined) attempt = 0;
   const narrator = NARRATORS[narratorKey] || NARRATORS[DEFAULT_NARRATOR];
+  const model = getModelForLanguage(language);
   const voiceSettings = ageNum <= 3
     ? { stability: 0.80, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
     : ageNum <= 5
     ? { stability: 0.65, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true }
     : { stability: 0.55, similarity_boost: 0.80, style: 0.35, use_speaker_boost: true };
   const languageCode = ELEVENLABS_LANG_CODES[language] || "en";
+  // multilingual_v2 doesn't need language_code — it auto-detects from text
+  const body = { text, model_id: model, voice_settings: voiceSettings };
+  if (model === "eleven_turbo_v2_5") body.language_code = languageCode;
   try {
     const r = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${narrator.id}`,
-      { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings, language_code: languageCode },
+      body,
       { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
     );
     return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
