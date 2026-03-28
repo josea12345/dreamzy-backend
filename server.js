@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v3" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v4" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -529,7 +529,7 @@ app.post("/generate-full-story", async (req, res) => {
     // imageUrl is a storage URL (https://...) or null — NEVER base64
     // audioUrl is a base64 data URI (not stored in DB, only sent to client)
     const finalPages = [
-      { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: null },
+      { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: null, language: lang },
       ...storyData.pages.map((p, i) => ({ ...p, imageUrl: imageUrls[i] || null, audioUrl: null }))
     ];
 
@@ -568,7 +568,7 @@ app.post("/generate-full-story", async (req, res) => {
         storySummary: storyData.storySummary,
         characters: storyData.characters,
         pages: [
-          { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: coverAudioUrl },
+          { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: coverAudioUrl, language: lang },
           ...storyData.pages.map((p, i) => ({
             ...p,
             imageUrl: imageUrls[i] || null,
