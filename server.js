@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v7" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "narrator-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -333,8 +333,20 @@ const ELEVENLABS_LANG_CODES = {
   en: "en", es_es: "es", es_la: "es", fr: "fr", pt: "pt", de: "de"
 };
 
-async function generateVoice(text, ageNum, language, attempt) {
+// Premade ElevenLabs voices — available to all users by default
+const NARRATORS = {
+  rachel:  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",  desc: "Warm & calm",      gender: "female" },
+  matilda: { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", desc: "Gentle & friendly", gender: "female" },
+  aria:    { id: "9BWtsMINqrJLrRacOk9x", name: "Aria",    desc: "Soft & expressive",  gender: "female" },
+  charlotte:{ id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "Soothing & rich", gender: "female" },
+  bill:    { id: "pqHfZKP75CvOlQylNhV4", name: "Bill",    desc: "Warm & deep",        gender: "male"   },
+  callum:  { id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum",  desc: "Fun & energetic",   gender: "male"   },
+};
+const DEFAULT_NARRATOR = "rachel";
+
+async function generateVoice(text, ageNum, language, narratorKey, attempt) {
   if (attempt === undefined) attempt = 0;
+  const narrator = NARRATORS[narratorKey] || NARRATORS[DEFAULT_NARRATOR];
   const voiceSettings = ageNum <= 3
     ? { stability: 0.80, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
     : ageNum <= 5
@@ -343,7 +355,7 @@ async function generateVoice(text, ageNum, language, attempt) {
   const languageCode = ELEVENLABS_LANG_CODES[language] || "en";
   try {
     const r = await axios.post(
-      "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+      `https://api.elevenlabs.io/v1/text-to-speech/${narrator.id}`,
       { text, model_id: "eleven_turbo_v2_5", voice_settings: voiceSettings, language_code: languageCode },
       { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
     );
@@ -354,7 +366,7 @@ async function generateVoice(text, ageNum, language, attempt) {
       const waitSec = [15, 30, 60][attempt];
       console.log("  ElevenLabs rate limited, waiting " + waitSec + "s (attempt " + (attempt+1) + ")...");
       await sleep(waitSec * 1000);
-      return generateVoice(text, ageNum, language, attempt + 1);
+      return generateVoice(text, ageNum, language, narratorKey, attempt + 1);
     }
     throw e;
   }
@@ -411,10 +423,11 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language, narrator } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   const lang = language || "en";
-  console.log("Using illustration style:", imgStyle, "| Language:", lang);
+  const narratorKey = narrator || DEFAULT_NARRATOR;
+  console.log("Using illustration style:", imgStyle, "| Language:", lang, "| Narrator:", narratorKey);
   if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
   if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
   const ageNum = parseInt(age) || 5;
@@ -482,7 +495,7 @@ app.post("/generate-full-story", async (req, res) => {
     try {
       const langConfig = LANGUAGE_CONFIG[lang] || LANGUAGE_CONFIG.en;
       const coverText = `${storyData.title}. ${langConfig.coverPhrase} ${childName}.`;
-      coverAudioUrl = await generateVoice(coverText, ageNum, lang);
+      coverAudioUrl = await generateVoice(coverText, ageNum, lang, narratorKey);
     } catch (e) {
       console.error("  Cover audio failed:", e.message);
     }
@@ -518,7 +531,7 @@ app.post("/generate-full-story", async (req, res) => {
       if (i > 0) await sleep(300);
       let result = null;
       try {
-        result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum, lang);
+        result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum, lang, narratorKey);
         console.log("  Voice " + (i + 1) + "/" + storyData.pages.length + " done");
       } catch (e) {
         console.error("  Voice " + (i + 1) + " failed after retries:", e.message);
@@ -590,16 +603,17 @@ app.post("/generate-full-story", async (req, res) => {
 });
 
 app.post("/regenerate-audio", async (req, res) => {
-  const { pages, age, language } = req.body;
+  const { pages, age, language, narrator } = req.body;
   if (!pages?.length) return res.status(400).json({ error: "No pages" });
   const ageNum = parseInt(age) || 5;
   const lang = language || "en";
+  const narratorKey = narrator || DEFAULT_NARRATOR;
   try {
-    console.log("Regenerating audio for " + pages.length + " pages (lang: " + lang + ")...");
+    console.log("Regenerating audio for " + pages.length + " pages (lang: " + lang + ", narrator: " + narratorKey + ")...");
     const audioUrls = await Promise.all(
       pages.map(async (page, i) => {
         try {
-          const url = await generateVoice(page.lines.join(" "), ageNum, lang);
+          const url = await generateVoice(page.lines.join(" "), ageNum, lang, narratorKey);
           console.log("  Voice " + (i + 1) + " done");
           return url;
         } catch (e) { console.error("  Voice " + (i + 1) + " failed:", e.message); return null; }
@@ -857,6 +871,10 @@ app.post("/send-bedtime-reminders", async (req, res) => {
     console.error("Bedtime reminders error:", e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+app.get("/narrators", (req, res) => {
+  res.json({ narrators: Object.entries(NARRATORS).map(([key, v]) => ({ key, ...v })) });
 });
 
 app.get("/checkout-urls", (req, res) => {
