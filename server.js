@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -564,14 +564,15 @@ app.post("/generate-full-story", async (req, res) => {
         createdAt: new Date().toISOString(),
         seriesId,
         episode,
+        language: lang,
         storySummary: storyData.storySummary,
         characters: storyData.characters,
         pages: [
           { isCover: true, title: storyData.title, childName, imageUrl: coverImageUrl, lines: [], audioUrl: coverAudioUrl },
           ...storyData.pages.map((p, i) => ({
             ...p,
-            imageUrl: imageUrls[i] || null,   // ← storage URL (https://...) or null
-            audioUrl: audioUrls[i] || null    // ← base64 audio, only in response (not in DB)
+            imageUrl: imageUrls[i] || null,
+            audioUrl: audioUrls[i] || null
           }))
         ]
       }
