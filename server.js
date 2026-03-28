@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v6" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v7" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -482,7 +482,6 @@ app.post("/generate-full-story", async (req, res) => {
     try {
       const langConfig = LANGUAGE_CONFIG[lang] || LANGUAGE_CONFIG.en;
       const coverText = `${storyData.title}. ${langConfig.coverPhrase} ${childName}.`;
-      console.log("  Cover text:", coverText, "| lang:", lang);
       coverAudioUrl = await generateVoice(coverText, ageNum, lang);
     } catch (e) {
       console.error("  Cover audio failed:", e.message);
