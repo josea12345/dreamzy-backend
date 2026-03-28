@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "reminder-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -102,15 +102,24 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
   };
 }
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, attempt) {
+const LANGUAGE_CONFIG = {
+  en:    { name: "English",                  instruction: "",                                                                                                                         sleepWords: /\b(sleep|slumber|yawn|dreamed|dreamt|drift|drifted|doze|dozed|snooze|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime)\b/i },
+  es_es: { name: "Spanish (Spain)",          instruction: "Write the ENTIRE story in Spanish from Spain (Castilian). Use vocabulary, expressions and grammar natural to Spain. Do NOT use Latin American Spanish variants.",  sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
+  es_la: { name: "Spanish (Latin America)",  instruction: "Write the ENTIRE story in Latin American Spanish. Use vocabulary, expressions and grammar natural to Latin America (not Spain). Avoid Castilian-specific terms.", sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
+  fr:    { name: "French",                   instruction: "Write the ENTIRE story in French. Use vocabulary and expressions natural to France.",                                      sleepWords: /\b(dormir|sommeil|bâiller|rêvé|s'endormir|fermé les yeux|bonne nuit)\b/i },
+  pt:    { name: "Portuguese (Brazil)",      instruction: "Write the ENTIRE story in Brazilian Portuguese. Use vocabulary and expressions natural to Brazil.",                        sleepWords: /\b(dormir|sono|bocejou|sonhou|adormecer|fechou os olhos|boa noite)\b/i },
+  de:    { name: "German",                   instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
+};
+
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language);
   } catch (e) {
     if ((e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, attempt + 1);
     }
     throw e;
   }
@@ -167,11 +176,15 @@ PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blue
 CRITICAL: The conflict must be fully resolved by page ${climaxPage}. Page ${pageCount} is the warm emotional close only.`;
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
   const pageBlueprint = getPageBlueprint(ageStyle.pages);
+  const lang = LANGUAGE_CONFIG[language] || LANGUAGE_CONFIG.en;
+  const languageInstruction = lang.instruction
+    ? `\nLANGUAGE: ${lang.instruction}\nCRITICAL: The "illustrationPrompt" field must ALWAYS be written in English — it is used for image generation only and must never be translated.`
+    : "";
 
   const continuationContext = previousStory ? `
 IMPORTANT — THIS IS A CONTINUATION (Episode ${(previousStory.episode || 1) + 1}):
@@ -194,6 +207,7 @@ Rules for continuation:
     system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child.${customHero ? ` The MAIN HERO of this story is NOT the child — it is: ${customHero}. ${childName} appears as a supporting character or friend, but ${customHero} drives the plot. Make ${customHero} the protagonist with a clear personality, name if appropriate, and their own arc.` : ""} This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
 ${pageBlueprint}
+${languageInstruction}
 ${continuationContext}
 Return ONLY valid JSON:
 {
@@ -235,13 +249,10 @@ RULES:
 }
 
 // Only replace the final page if it contains sleep words — never replace a good resolution
-function improveEnding(finalPage, childName) {
-  const sleepWords = /\b(sleep|slumber|yawn|dreamed|dreamt|drift|drifted|doze|dozed|snooze|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime)\b/i;
+function improveEnding(finalPage, childName, theme, ageNum, language) {
+  const lang = LANGUAGE_CONFIG[language] || LANGUAGE_CONFIG.en;
   const lastLines = (finalPage.lines || []).join(" ");
-  if (!sleepWords.test(lastLines)) {
-    // The AI wrote a good ending — leave it alone
-    return finalPage;
-  }
+  if (!lang.sleepWords.test(lastLines)) return finalPage;
   // Only fires when the ending literally has the child falling asleep
   const endings = [
     [`${childName} laughs and cheers — what an adventure!`, `"Let's do it again!" ${childName} says with a grin.`],
@@ -395,9 +406,10 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
 }
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
-  console.log("Using illustration style:", imgStyle);
+  const lang = language || "en";
+  console.log("Using illustration style:", imgStyle, "| Language:", lang);
   if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
   if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
   const ageNum = parseInt(age) || 5;
@@ -416,7 +428,7 @@ app.post("/generate-full-story", async (req, res) => {
         child_name: childName || customHero || "story",
         age: ageNum, created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        status: "generating", progress: 0, pages: []
+        status: "generating", progress: 0, pages: [], language: lang
       });
       if (genError) console.error("Gen insert error:", JSON.stringify(genError));
       else console.log("Generation record created:", genId);
@@ -428,7 +440,7 @@ app.post("/generate-full-story", async (req, res) => {
       }
     };
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang);
     await updateProgress(15, "generating");
 
     if (appearance && appearance.trim()) {
@@ -440,7 +452,7 @@ app.post("/generate-full-story", async (req, res) => {
       console.log("Using parent appearance:", storyData.characterDescription);
     }
 
-    storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum);
+    storyData.pages[storyData.pages.length - 1] = improveEnding(storyData.pages[storyData.pages.length - 1], childName, theme, ageNum, lang);
     console.log("Got: \"" + storyData.title + "\" (" + storyData.ageRange + ") — " + storyData.pages.length + " pages");
 
     console.log("Generating illustrations...");
