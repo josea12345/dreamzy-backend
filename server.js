@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lang-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -103,12 +103,12 @@ WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
 }
 
 const LANGUAGE_CONFIG = {
-  en:    { name: "English",                  instruction: "",                                                                                                                         sleepWords: /\b(sleep|slumber|yawn|dreamed|dreamt|drift|drifted|doze|dozed|snooze|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime)\b/i },
-  es_es: { name: "Spanish (Spain)",          instruction: "Write the ENTIRE story in Spanish from Spain (Castilian). Use vocabulary, expressions and grammar natural to Spain. Do NOT use Latin American Spanish variants.",  sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
-  es_la: { name: "Spanish (Latin America)",  instruction: "Write the ENTIRE story in Latin American Spanish. Use vocabulary, expressions and grammar natural to Latin America (not Spain). Avoid Castilian-specific terms.", sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
-  fr:    { name: "French",                   instruction: "Write the ENTIRE story in French. Use vocabulary and expressions natural to France.",                                      sleepWords: /\b(dormir|sommeil|bâiller|rêvé|s'endormir|fermé les yeux|bonne nuit)\b/i },
-  pt:    { name: "Portuguese (Brazil)",      instruction: "Write the ENTIRE story in Brazilian Portuguese. Use vocabulary and expressions natural to Brazil.",                        sleepWords: /\b(dormir|sono|bocejou|sonhou|adormecer|fechou os olhos|boa noite)\b/i },
-  de:    { name: "German",                   instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
+  en:    { name: "English",                  coverPhrase: "A story for",         instruction: "",                                                                                                                         sleepWords: /\b(sleep|slumber|yawn|dreamed|dreamt|drift|drifted|doze|dozed|snooze|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime)\b/i },
+  es_es: { name: "Spanish (Spain)",          coverPhrase: "Un cuento para",      instruction: "Write the ENTIRE story in Spanish from Spain (Castilian). Use vocabulary, expressions and grammar natural to Spain. Do NOT use Latin American Spanish variants.",  sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
+  es_la: { name: "Spanish (Latin America)",  coverPhrase: "Un cuento para",      instruction: "Write the ENTIRE story in Latin American Spanish. Use vocabulary, expressions and grammar natural to Latin America (not Spain). Avoid Castilian-specific terms.", sleepWords: /\b(dormir|sueño|bostez|soñó|soñar|durmió|siesta|dormirse|cerraron los ojos|buenas noches)\b/i },
+  fr:    { name: "French",                   coverPhrase: "Une histoire pour",   instruction: "Write the ENTIRE story in French. Use vocabulary and expressions natural to France.",                                      sleepWords: /\b(dormir|sommeil|bâiller|rêvé|s'endormir|fermé les yeux|bonne nuit)\b/i },
+  pt:    { name: "Portuguese (Brazil)",      coverPhrase: "Uma história para",   instruction: "Write the ENTIRE story in Brazilian Portuguese. Use vocabulary and expressions natural to Brazil.",                        sleepWords: /\b(dormir|sono|bocejou|sonhou|adormecer|fechou os olhos|boa noite)\b/i },
+  de:    { name: "German",                   coverPhrase: "Eine Geschichte für", instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
 };
 
 async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, attempt) {
@@ -475,8 +475,7 @@ app.post("/generate-full-story", async (req, res) => {
     // ── Cover narration ──────────────────────────────────────────────────────
     let coverAudioUrl = null;
     try {
-      const coverText = `${storyData.title}. A story for ${childName}.`;
-      // FIX: generateVoice returns a string directly, not an object
+      const coverText = `${storyData.title}. ${lang.coverPhrase} ${childName}.`;
       coverAudioUrl = await generateVoice(coverText, ageNum);
     } catch (e) {
       console.error("  Cover audio failed:", e.message);
