@@ -400,8 +400,6 @@ const ELEVENLABS_LANG_CODES = {
 const NARRATORS = {
   rachel:   { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",   desc: "Warm & calm",      gender: "female" },
   matilda:  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda",  desc: "Gentle & friendly", gender: "female" },
-  george:   { id: "JBFqnCBsd6RMkjVDRZzb", name: "George",   desc: "Warm British",       gender: "male"   },
-  charlotte:{ id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte",desc: "Soothing & rich",   gender: "female" },
   bill:     { id: "pqHfZKP75CvOlQylNhV4", name: "Bill",     desc: "Warm & deep",        gender: "male"   },
   callum:   { id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum",   desc: "Fun & energetic",    gender: "male"   },
 };
