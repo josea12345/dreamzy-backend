@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "elevenlabs-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "elevenlabs-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -133,15 +133,15 @@ async function generateStoryWithRetry(childName, age, interests, theme, mood, pr
 function getPageBlueprint(pageCount, childName) {
   if (pageCount <= 5) return `
 PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
-  Page 1: WORLD & CHARACTER — introduce ${childName || "the hero"} in ONE specific place (a bedroom, a garden, a kitchen). Show them doing something they love. The final line hints at the story's problem or wish.
-  Page 2: THE PROBLEM APPEARS — the specific challenge becomes clear. ${childName || "The hero"} wants or needs something, or something goes wrong. They decide to do something about it.
-  Page 3: THE ATTEMPT & COMPLICATION — ${childName || "the hero"} tries ONE clear action. Something unexpected or funny happens as a result. The situation is now more interesting.
-  Page 4: THE RESOLUTION — ${childName || "the hero"} solves the problem with a clever or surprising action. This is the emotional peak. Show it fully — don't rush past it.
-  Page 5: THE WARM ENDING — same location as page 1 (full circle). ${childName || "The hero"} feels the joy of what they did. A cozy, warm, satisfied final image.
+  Page 1: WORLD & CHARACTER — introduce ${childName||"the hero"} in ONE specific place. Show them doing something they love. The final line introduces or hints at the story's problem.
+  Page 2: THE PROBLEM APPEARS — the specific challenge is clear and urgent. ${childName||"The hero"} decides to act. The reader knows exactly what needs to happen for the story to be resolved.
+  Page 3: THE ATTEMPT — ${childName||"the hero"} takes ONE specific action toward solving the problem. Something unexpected happens. The stakes are now higher or the situation more interesting.
+  Page 4: THE RESOLUTION — ${childName||"the hero"} physically completes the solution. SHOW the exact action: they bring back the object, fix the thing, deliver the item, reunite with the friend. The problem is visibly, concretely solved on this page. DO NOT summarize — show every beat. Example: if the problem was a missing ingredient, page 4 shows the hero returning with it AND using it.
+  Page 5: THE WARM ENDING — back to where the story started (full circle). The result of page 4 is now visible: the shop is saved, the cake is made, the friend is happy. ${childName||"The hero"} feels the joy. One specific warm detail closes the story.
 
-CRITICAL: Every page must directly connect to the one before it. Page 3 happens BECAUSE of page 2. Page 4 happens BECAUSE of page 3. No scene can exist in isolation.
-CRITICAL: The problem MUST be solved on page 4. Page 5 is only the warm landing — never the moment of resolution.
-CRITICAL: The same ${childName || "hero"} and same world must appear on every single page. No new locations unless they connect directly to the previous page.`;
+CRITICAL: Page 4 MUST show the physical act of solving — not the celebration after. The resolution is an ACTION, not a reaction.
+CRITICAL: Page 5 is the RESULT of page 4 being visible in the world. Not a new scene — the same world, changed by what happened on page 4.
+CRITICAL: Every page must directly cause the next. No isolated moments. No teleporting to new locations without connection.`;
 
   if (pageCount <= 6) return `
 PAGE-BY-PAGE STRUCTURE — you have exactly ${pageCount} pages. Follow this blueprint precisely:
@@ -250,7 +250,8 @@ RULES:
   * SAME LOCATION FAMILY: the story should stay in 1-2 connected locations (home + garden, bedroom + living room). No teleporting to new worlds each page.
   * REPEAT THE HERO: ${childName} must appear on EVERY page doing something related to the plot. Never disappear for a page.
   * EMOTIONAL THROUGHLINE: establish one feeling on page 1 (excited, worried, curious) and resolve it by the last page. Every page moves toward that resolution.
-  * CAUSE AND EFFECT: each page's action must directly cause what happens on the next page. Page 2 happens BECAUSE of page 1.` : ""}
+  * CAUSE AND EFFECT: each page's action must directly cause what happens on the next page. Page 2 happens BECAUSE of page 1.
+  * SHOW THE RESOLUTION: the moment the problem is solved must be written out fully — the hero physically does the thing. Never skip to the celebration without showing the action that caused it. Wrong: "Everyone cheered!" Right: "${childName} placed the cheese on the pizza. It melted perfectly. Tony smiled wide."` : ""}
 - ILLUSTRATION PROMPTS — this is critical for visual consistency:
   * Every illustrationPrompt MUST follow this exact format: "[CHARACTER DESCRIPTION] is [DOING WHAT] in/at [SPECIFIC LOCATION]. [SUPPORTING CHARACTERS if any]. [MOOD/LIGHTING]. [KEY VISUAL DETAILS]."
   * Example: "A girl with curly red hair, green eyes, yellow raincoat is climbing a giant mushroom in an enchanted forest. A small blue rabbit watches from below. Warm golden light. Magical and whimsical."
