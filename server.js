@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "mood-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "mood-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -113,15 +113,15 @@ const LANGUAGE_CONFIG = {
   de:    { name: "German",                   coverPhrase: "Eine Geschichte für", instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
 };
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching);
   } catch (e) {
     if ((e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, attempt + 1);
     }
     throw e;
   }
@@ -189,11 +189,11 @@ CRITICAL: Every page must earn its place. Ask for each page: "what does this rev
 CRITICAL: ${childName||"The hero"}'s internal growth must mirror the external plot. By page ${pageCount} they are different from page 1.`;
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
-  const pageBlueprint = getPageBlueprint(ageStyle.pages, childName);
+  const pageBlueprint = getPageBlueprint(ageStyle.pages, justWatching && customHero ? customHero : childName);
   const lang = LANGUAGE_CONFIG[language] || LANGUAGE_CONFIG.en;
   const languageInstruction = lang.instruction
     ? `\nLANGUAGE: ${lang.instruction}\nCRITICAL: The "illustrationPrompt" field must ALWAYS be written in English — it is used for image generation only and must never be translated.`
@@ -224,7 +224,7 @@ Rules for continuation:
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4000,
-    system: `You are a master children's book author. Write a personalized cozy evening story for a ${ageNum}-year-old child.${customHero ? ` The MAIN HERO of this story is NOT the child — it is: ${customHero}. ${childName} appears as a supporting character or friend, but ${customHero} drives the plot. Make ${customHero} the protagonist with a clear personality, name if appropriate, and their own arc.` : ""} This is a story to be read before bed but it should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
+    system: `You are a master children's book author. Write a personalized story for a ${ageNum}-year-old child to enjoy.${justWatching && customHero ? ` The story is about ${customHero} ONLY. Do NOT include ${childName} anywhere in the story — not as a character, not mentioned, not referenced. ${childName} is purely the reader/audience.` : customHero ? ` The MAIN HERO of this story is NOT the child — it is: ${customHero}. ${childName} appears as a supporting character or friend, but ${customHero} drives the plot. Make ${customHero} the protagonist with a clear personality, name if appropriate, and their own arc.` : ""} This is a story that should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
 ${pageBlueprint}
 ${languageInstruction}
@@ -577,7 +577,7 @@ Return ONLY valid JSON with no markdown:
 });
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language, narrator, plan, storyMode } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, justWatching, language, narrator, plan, storyMode } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   const lang = language || "en";
   const narratorKey = narrator || DEFAULT_NARRATOR;
@@ -614,7 +614,7 @@ app.post("/generate-full-story", async (req, res) => {
       }
     };
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus, activeStoryMode);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus, activeStoryMode, justWatching);
     await updateProgress(15, "generating");
 
     if (appearance && appearance.trim()) {
