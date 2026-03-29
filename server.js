@@ -1127,6 +1127,7 @@ app.post("/send-weekly-recap", async (req, res) => {
 });
 
 
+app.post("/send-bedtime-reminders", async (req, res) => {
   // Simple secret check so random people can't spam your users
   const secret = req.headers["x-cron-secret"];
   if (secret !== process.env.CRON_SECRET) {
