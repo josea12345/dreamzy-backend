@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "mood-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "recap-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -997,7 +997,136 @@ app.post("/generate-pdf", async (req, res) => {
 });
 
 // ── Bedtime reminder emails ───────────────────────────────────────────────────
-app.post("/send-bedtime-reminders", async (req, res) => {
+app.post("/send-weekly-recap", async (req, res) => {
+  const secret = req.headers["x-cron-secret"];
+  if (secret !== process.env.CRON_SECRET) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Get all users who generated a story in the last 7 days
+    const { data: activeUsers, error } = await supabaseAdmin
+      .from("stories")
+      .select("user_id, title, child_name, created_at, pages")
+      .gte("created_at", sevenDaysAgo)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    if (!activeUsers?.length) return res.json({ sent: 0, total: 0 });
+
+    // Group stories by user
+    const byUser = {};
+    for (const s of activeUsers) {
+      if (!byUser[s.user_id]) byUser[s.user_id] = [];
+      byUser[s.user_id].push(s);
+    }
+
+    // Get profile info (email + streak) for these users
+    const userIds = Object.keys(byUser);
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id, email, streak_count, last_story_date")
+      .in("id", userIds)
+      .not("email", "is", null);
+
+    if (!profiles?.length) return res.json({ sent: 0, total: 0 });
+
+    let sent = 0;
+    for (const profile of profiles) {
+      try {
+        const stories = byUser[profile.id] || [];
+        if (!stories.length) continue;
+
+        const streak = profile.streak_count || 0;
+        const childName = stories[0].child_name || "your child";
+        const storyCount = stories.length;
+        const frontendUrl = process.env.FRONTEND_URL || "https://dreamzy.xyz";
+
+        // Build story cards HTML — up to 4, with cover image
+        const storyCards = stories.slice(0, 4).map(s => {
+          const coverPage = (s.pages || []).find(p => p.isCover);
+          const coverImg = coverPage?.imageUrl;
+          return `
+            <div style="display:inline-block;width:110px;vertical-align:top;margin:0 8px 16px;text-align:center;">
+              ${coverImg
+                ? `<img src="${coverImg}" width="110" height="110" style="border-radius:12px;object-fit:cover;display:block;margin-bottom:8px;" alt="${s.title}"/>`
+                : `<div style="width:110px;height:110px;background:rgba(255,255,255,0.06);border-radius:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:32px;">✨</div>`
+              }
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);line-height:1.4;">${s.title}</div>
+            </div>
+          `;
+        }).join("");
+
+        const streakBlock = streak >= 2 ? `
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,150,50,0.15);border:1px solid rgba(255,150,50,0.3);border-radius:20px;padding:8px 20px;margin-bottom:24px;">
+            <span style="font-size:20px;">🔥</span>
+            <span style="color:#FF9632;font-weight:700;font-size:14px;">${streak} day streak — keep it going!</span>
+          </div>
+        ` : "";
+
+        await resend.emails.send({
+          from: "Dreamzy <stories@dreamzy.xyz>",
+          to: profile.email,
+          subject: `✨ ${childName}'s week in stories — ${storyCount} ${storyCount === 1 ? "adventure" : "adventures"}!`,
+          html: `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body style="margin:0;padding:0;background:#0d0a1e;font-family:'Helvetica Neue',Arial,sans-serif;">
+              <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+
+                <div style="text-align:center;margin-bottom:32px;">
+                  <img src="https://dreamzy.xyz/logo.png" width="72" height="72" style="display:block;margin:0 auto 8px;" alt="Dreamzy"/>
+                  <div style="font-size:26px;font-weight:700;color:white;">Dream<span style="color:#f4a87a">zy</span></div>
+                </div>
+
+                <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;text-align:center;">
+                  <h1 style="color:white;font-size:22px;margin:0 0 8px;font-weight:700;font-style:italic;">
+                    ${childName}'s week in stories ✨
+                  </h1>
+                  <p style="color:rgba(255,255,255,0.4);font-size:14px;margin:0 0 24px;">
+                    ${storyCount} ${storyCount === 1 ? "story" : "stories"} created this week
+                  </p>
+
+                  ${streakBlock}
+
+                  <div style="margin-bottom:28px;">
+                    ${storyCards}
+                  </div>
+
+                  <a href="${frontendUrl}"
+                    style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#D4845A,#C878C0,#8B5CF6);border-radius:20px;color:white;text-decoration:none;font-weight:700;font-size:16px;box-shadow:0 4px 20px rgba(212,132,90,0.4);">
+                    ✨ Create this week's next story
+                  </a>
+                </div>
+
+                <div style="text-align:center;margin-top:20px;">
+                  <p style="color:rgba(255,255,255,0.15);font-size:12px;margin:0;">
+                    Made with ✨ by Dreamzy &nbsp;·&nbsp;
+                    <a href="https://dreamzy.xyz" style="color:rgba(255,255,255,0.2);">dreamzy.xyz</a>
+                  </p>
+                </div>
+              </div>
+            </body>
+            </html>
+          `,
+        });
+        sent++;
+        console.log("Weekly recap sent to:", profile.email);
+        await sleep(200);
+      } catch (e) {
+        console.error("Weekly recap failed for:", profile.email, e.message);
+      }
+    }
+
+    res.json({ sent, total: profiles.length });
+  } catch (e) {
+    console.error("Weekly recap error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
   // Simple secret check so random people can't spam your users
   const secret = req.headers["x-cron-secret"];
   if (secret !== process.env.CRON_SECRET) {
