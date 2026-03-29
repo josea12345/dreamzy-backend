@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "consistency-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "mood-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -113,15 +113,15 @@ const LANGUAGE_CONFIG = {
   de:    { name: "German",                   coverPhrase: "Eine Geschichte für", instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
 };
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode);
   } catch (e) {
     if ((e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, attempt + 1);
     }
     throw e;
   }
@@ -189,7 +189,7 @@ CRITICAL: Every page must earn its place. Ask for each page: "what does this rev
 CRITICAL: ${childName||"The hero"}'s internal growth must mirror the external plot. By page ${pageCount} they are different from page 1.`;
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -199,7 +199,13 @@ async function generateStory(childName, age, interests, theme, mood, previousSto
     ? `\nLANGUAGE: ${lang.instruction}\nCRITICAL: The "illustrationPrompt" field must ALWAYS be written in English — it is used for image generation only and must never be translated.`
     : "";
 
-  const continuationContext = previousStory ? `
+  const storyModeInstructions = storyMode === "bedtime"
+    ? `STORY VIBE — BEDTIME: This is a cozy, calming story for winding down. Use slow gentle pacing. Sentences should feel like a warm hug. Avoid high-energy action or chaos. The ending should leave the child feeling safe, warm, and content. Think Goodnight Moon energy — peaceful, repetitive, soothing.`
+    : storyMode === "silly"
+    ? `STORY VIBE — SILLY: This story should be laugh-out-loud funny. Embrace chaos, absurdity, and unexpected twists. Characters overreact dramatically. Things go hilariously wrong. Use onomatopoeia, silly sounds, exaggerated reactions. Think Dav Pilkey / Mo Willems energy — pure comedic mayhem with a funny resolution.`
+    : `STORY VIBE — DAYTIME: This is an energetic, adventurous story full of curiosity and excitement. Fast-paced, active, fun. Characters are bold and enthusiastic. Things happen quickly and dynamically. The ending feels like a triumphant high-five moment.`;
+
+
 IMPORTANT — THIS IS A CONTINUATION (Episode ${(previousStory.episode || 1) + 1}):
 Previous story title: "${previousStory.title}"
 What happened before: ${previousStory.story_summary || "An adventure with " + childName}
@@ -240,6 +246,7 @@ RULES:
 - Use ${childName}'s name naturally — not on every single line, just when it feels right
 - INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON: Weave "${lesson}" into the story organically — through what happens, not through characters saying it out loud.` : ""}
+- ${storyModeInstructions}
 - NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible", "joyfully", "beautifully", "amazing". Use simple direct language. Show don't tell.
 - EVERY sentence must sound natural when read aloud to a child. Test each line: would a parent read it naturally to a sleepy child? If not, rewrite it.
 - CAUSE & EFFECT: before writing each page, ask "what happened on the previous page that makes THIS page happen?" If the answer is "nothing" — rewrite the page. Every page must be caused by the previous one.
@@ -419,15 +426,35 @@ function formatNarration(lines, ageNum) {
   return safeLine.join(` <break time="${pauseTime}" /> `);
 }
 
-async function generateVoice(text, ageNum, language, narratorKey, attempt) {
+async function generateVoice(text, ageNum, language, narratorKey, attempt, storyMode) {
   if (attempt === undefined) attempt = 0;
   const narrator = NARRATORS[narratorKey] || NARRATORS[DEFAULT_NARRATOR];
   const model = getModelForLanguage(language);
-  const voiceSettings = ageNum <= 3
-    ? { stability: 0.80, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
-    : ageNum <= 5
-    ? { stability: 0.65, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true }
-    : { stability: 0.55, similarity_boost: 0.80, style: 0.35, use_speaker_boost: true };
+
+  // Voice settings vary by story mode and age
+  let voiceSettings;
+  if (storyMode === "bedtime") {
+    // Slower, more stable, very calm — designed for winding down
+    voiceSettings = ageNum <= 3
+      ? { stability: 0.90, similarity_boost: 0.75, style: 0.02, use_speaker_boost: true }
+      : ageNum <= 5
+      ? { stability: 0.80, similarity_boost: 0.80, style: 0.08, use_speaker_boost: true }
+      : { stability: 0.75, similarity_boost: 0.80, style: 0.12, use_speaker_boost: true };
+  } else if (storyMode === "silly") {
+    // More expressive, playful, higher style score
+    voiceSettings = ageNum <= 3
+      ? { stability: 0.65, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }
+      : ageNum <= 5
+      ? { stability: 0.55, similarity_boost: 0.80, style: 0.45, use_speaker_boost: true }
+      : { stability: 0.45, similarity_boost: 0.80, style: 0.55, use_speaker_boost: true };
+  } else {
+    // Daytime — energetic but clear
+    voiceSettings = ageNum <= 3
+      ? { stability: 0.80, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
+      : ageNum <= 5
+      ? { stability: 0.65, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true }
+      : { stability: 0.55, similarity_boost: 0.80, style: 0.35, use_speaker_boost: true };
+  }
   const languageCode = ELEVENLABS_LANG_CODES[language] || "en";
   // multilingual_v2 doesn't need language_code — it auto-detects from text
   const body = { text, model_id: model, voice_settings: voiceSettings, enable_ssml_parsing: true };
@@ -445,7 +472,7 @@ async function generateVoice(text, ageNum, language, narratorKey, attempt) {
       const waitSec = [15, 30, 60][attempt];
       console.log("  ElevenLabs rate limited, waiting " + waitSec + "s (attempt " + (attempt+1) + ")...");
       await sleep(waitSec * 1000);
-      return generateVoice(text, ageNum, language, narratorKey, attempt + 1);
+      return generateVoice(text, ageNum, language, narratorKey, attempt + 1, storyMode);
     }
     throw e;
   }
@@ -551,12 +578,13 @@ Return ONLY valid JSON with no markdown:
 });
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language, narrator, plan } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language, narrator, plan, storyMode } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   const lang = language || "en";
   const narratorKey = narrator || DEFAULT_NARRATOR;
   const isFamilyPlus = plan === "family_plus";
-  console.log("Using illustration style:", imgStyle, "| Language:", lang, "| Narrator:", narratorKey, "| Plan:", plan);
+  const activeStoryMode = storyMode || "daytime";
+  console.log("Using illustration style:", imgStyle, "| Language:", lang, "| Narrator:", narratorKey, "| Plan:", plan, "| Mode:", activeStoryMode);
   if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
   if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
   const ageNum = parseInt(age) || 5;
@@ -587,7 +615,7 @@ app.post("/generate-full-story", async (req, res) => {
       }
     };
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus, activeStoryMode);
     await updateProgress(15, "generating");
 
     if (appearance && appearance.trim()) {
@@ -624,7 +652,7 @@ app.post("/generate-full-story", async (req, res) => {
     try {
       const langConfig = LANGUAGE_CONFIG[lang] || LANGUAGE_CONFIG.en;
       const coverText = `${storyData.title}. ${langConfig.coverPhrase} ${childName}.`;
-      coverAudioUrl = await generateVoice(coverText, ageNum, lang, narratorKey);
+      coverAudioUrl = await generateVoice(coverText, ageNum, lang, narratorKey, undefined, activeStoryMode);
     } catch (e) {
       console.error("  Cover audio failed:", e.message);
     }
@@ -676,7 +704,7 @@ app.post("/generate-full-story", async (req, res) => {
       if (i > 0) await sleep(300);
       let result = null;
       try {
-        result = await generateVoice(formatNarration(storyData.pages[i].lines, ageNum), ageNum, lang, narratorKey);
+        result = await generateVoice(formatNarration(storyData.pages[i].lines, ageNum), ageNum, lang, narratorKey, undefined, activeStoryMode);
         console.log("  Voice " + (i + 1) + "/" + storyData.pages.length + " done");
       } catch (e) {
         console.error("  Voice " + (i + 1) + " failed after retries:", e.message);
@@ -766,17 +794,18 @@ app.post("/generate-full-story", async (req, res) => {
 });
 
 app.post("/regenerate-audio", async (req, res) => {
-  const { pages, age, language, narrator } = req.body;
+  const { pages, age, language, narrator, storyMode } = req.body;
   if (!pages?.length) return res.status(400).json({ error: "No pages" });
   const ageNum = parseInt(age) || 5;
   const lang = language || "en";
   const narratorKey = narrator || DEFAULT_NARRATOR;
+  const activeMode = storyMode || "daytime";
   try {
-    console.log("Regenerating audio for " + pages.length + " pages (lang: " + lang + ", narrator: " + narratorKey + ")...");
+    console.log("Regenerating audio for " + pages.length + " pages (lang: " + lang + ", narrator: " + narratorKey + ", mode: " + activeMode + ")...");
     const audioUrls = await Promise.all(
       pages.map(async (page, i) => {
         try {
-          const url = await generateVoice(formatNarration(page.lines, ageNum), ageNum, lang, narratorKey);
+          const url = await generateVoice(formatNarration(page.lines, ageNum), ageNum, lang, narratorKey, undefined, activeMode);
           console.log("  Voice " + (i + 1) + " done");
           return url;
         } catch (e) { console.error("  Voice " + (i + 1) + " failed:", e.message); return null; }
