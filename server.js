@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "story-quality-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "elevenlabs-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -386,6 +386,20 @@ function getModelForLanguage(language) {
   return language === "en" ? "eleven_turbo_v2_5" : "eleven_multilingual_v2";
 }
 
+// Format page lines for narration with natural pauses between them
+// Keep break count low — too many causes ElevenLabs to speed up or artifact
+function formatNarration(lines, ageNum) {
+  if (!lines || lines.length === 0) return "";
+  if (lines.length === 1) return lines[0];
+  // Toddlers (≤3): longer pauses, slow and warm
+  // Ages 4-5: medium pauses
+  // Ages 6+: shorter pauses, more natural flow
+  const pauseTime = ageNum <= 3 ? "1.2s" : ageNum <= 5 ? "0.9s" : "0.7s";
+  // Join lines with break tags — max 2 breaks to avoid instability
+  const safeLine = lines.slice(0, 3); // cap at 3 lines for safety
+  return safeLine.join(` <break time="${pauseTime}" /> `);
+}
+
 async function generateVoice(text, ageNum, language, narratorKey, attempt) {
   if (attempt === undefined) attempt = 0;
   const narrator = NARRATORS[narratorKey] || NARRATORS[DEFAULT_NARRATOR];
@@ -397,7 +411,7 @@ async function generateVoice(text, ageNum, language, narratorKey, attempt) {
     : { stability: 0.55, similarity_boost: 0.80, style: 0.35, use_speaker_boost: true };
   const languageCode = ELEVENLABS_LANG_CODES[language] || "en";
   // multilingual_v2 doesn't need language_code — it auto-detects from text
-  const body = { text, model_id: model, voice_settings: voiceSettings };
+  const body = { text, model_id: model, voice_settings: voiceSettings, enable_ssml_parsing: true };
   if (model === "eleven_turbo_v2_5") body.language_code = languageCode;
   try {
     const r = await axios.post(
@@ -596,7 +610,7 @@ app.post("/generate-full-story", async (req, res) => {
       if (i > 0) await sleep(300);
       let result = null;
       try {
-        result = await generateVoice(storyData.pages[i].lines.join(" "), ageNum, lang, narratorKey);
+        result = await generateVoice(formatNarration(storyData.pages[i].lines, ageNum), ageNum, lang, narratorKey);
         console.log("  Voice " + (i + 1) + "/" + storyData.pages.length + " done");
       } catch (e) {
         console.error("  Voice " + (i + 1) + " failed after retries:", e.message);
@@ -696,7 +710,7 @@ app.post("/regenerate-audio", async (req, res) => {
     const audioUrls = await Promise.all(
       pages.map(async (page, i) => {
         try {
-          const url = await generateVoice(page.lines.join(" "), ageNum, lang, narratorKey);
+          const url = await generateVoice(formatNarration(page.lines, ageNum), ageNum, lang, narratorKey);
           console.log("  Voice " + (i + 1) + " done");
           return url;
         } catch (e) { console.error("  Voice " + (i + 1) + " failed:", e.message); return null; }
