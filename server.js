@@ -206,6 +206,7 @@ async function generateStory(childName, age, interests, theme, mood, previousSto
     : `STORY VIBE — DAYTIME: This is an energetic, adventurous story full of curiosity and excitement. Fast-paced, active, fun. Characters are bold and enthusiastic. Things happen quickly and dynamically. The ending feels like a triumphant high-five moment.`;
 
 
+  const continuationContext = previousStory ? `
 IMPORTANT — THIS IS A CONTINUATION (Episode ${(previousStory.episode || 1) + 1}):
 Previous story title: "${previousStory.title}"
 What happened before: ${previousStory.story_summary || "An adventure with " + childName}
