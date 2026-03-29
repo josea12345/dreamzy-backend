@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "recap-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "classroom-v2" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -113,15 +113,15 @@ const LANGUAGE_CONFIG = {
   de:    { name: "German",                   coverPhrase: "Eine Geschichte für", instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
 };
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom);
   } catch (e) {
     if ((e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, attempt + 1);
     }
     throw e;
   }
@@ -189,7 +189,7 @@ CRITICAL: Every page must earn its place. Ask for each page: "what does this rev
 CRITICAL: ${childName||"The hero"}'s internal growth must mirror the external plot. By page ${pageCount} they are different from page 1.`;
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom) {
   const interestList = interests.join(", ");
   const ageNum = parseInt(age) || 5;
   const ageStyle = getAgeStyle(ageNum, options?.pageCount);
@@ -224,7 +224,7 @@ Rules for continuation:
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4000,
-    system: `You are a master children's book author. Write a personalized story for a ${ageNum}-year-old child to enjoy.${justWatching && customHero ? ` The story is about ${customHero} ONLY. Do NOT include ${childName} anywhere in the story — not as a character, not mentioned, not referenced. ${childName} is purely the reader/audience.` : customHero ? ` The MAIN HERO of this story is NOT the child — it is: ${customHero}. ${childName} appears as a supporting character or friend, but ${customHero} drives the plot. Make ${customHero} the protagonist with a clear personality, name if appropriate, and their own arc.` : ""} This is a story that should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
+    system: `You are a master children's book author. Write a personalized story for a ${ageNum}-year-old child to enjoy.${isClassroom ? ` This is a CLASSROOM story to be read to a group of students. Write for a GROUP AUDIENCE — use "everyone", "the whole class", collective moments of wonder. Include 2-3 interactive participation moments where students can call out, make sounds, or act along ("Can you roar like a dinosaur?", "Everyone freeze!"). Make it engaging for a room full of children, not just one. Avoid any personal references to a single child's life.` : ""}${justWatching && customHero ? ` The story is about ${customHero} ONLY. Do NOT include ${childName} anywhere in the story — not as a character, not mentioned, not referenced. ${childName} is purely the reader/audience.` : customHero ? ` The MAIN HERO of this story is NOT the child — it is: ${customHero}. ${childName} appears as a supporting character or friend, but ${customHero} drives the plot. Make ${customHero} the protagonist with a clear personality, name if appropriate, and their own arc.` : ""} This is a story that should NOT end with the child sleeping — it ends with a warm, happy, satisfied feeling like the end of a great adventure.
 ${ageStyle.style}
 ${pageBlueprint}
 ${languageInstruction}
@@ -577,7 +577,7 @@ Return ONLY valid JSON with no markdown:
 });
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, justWatching, language, narrator, plan, storyMode } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, justWatching, isClassroom, language, narrator, plan, storyMode } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   const lang = language || "en";
   const narratorKey = narrator || DEFAULT_NARRATOR;
@@ -614,7 +614,7 @@ app.post("/generate-full-story", async (req, res) => {
       }
     };
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus, activeStoryMode, justWatching);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus, activeStoryMode, justWatching, isClassroom);
     await updateProgress(15, "generating");
 
     if (appearance && appearance.trim()) {
@@ -697,7 +697,9 @@ app.post("/generate-full-story", async (req, res) => {
     console.log("Generating narration...");
     await updateProgress(70, "narrating");
     const audioUrls = [];
+    const skipNarration = narratorKey === "none";
     for (let i = 0; i < storyData.pages.length; i++) {
+      if(skipNarration){audioUrls.push(null);continue;}
       await updateProgress(70 + Math.round((i / storyData.pages.length) * 25), "narrating");
       // Small gap between calls to avoid bursting ElevenLabs
       if (i > 0) await sleep(300);
@@ -1230,6 +1232,10 @@ app.get("/checkout-urls", (req, res) => {
     familyYearly: process.env.LEMONSQUEEZY_FAMILY_YEARLY_URL,
     familyPlusMonthly: process.env.LEMONSQUEEZY_FAMILYPLUS_MONTHLY_URL,
     familyPlusYearly: process.env.LEMONSQUEEZY_FAMILYPLUS_YEARLY_URL,
+    classroomBasicMonthly: process.env.LEMONSQUEEZY_CLASSROOM_BASIC_MONTHLY_URL,
+    classroomBasicYearly: process.env.LEMONSQUEEZY_CLASSROOM_BASIC_YEARLY_URL,
+    classroomProMonthly: process.env.LEMONSQUEEZY_CLASSROOM_PRO_MONTHLY_URL,
+    classroomProYearly: process.env.LEMONSQUEEZY_CLASSROOM_PRO_YEARLY_URL,
   });
 });
 
