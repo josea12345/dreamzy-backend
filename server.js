@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "preview-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "consistency-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -226,7 +226,7 @@ Return ONLY valid JSON with no markdown, no code blocks, no explanation before o
 {
   "title": "Catchy episode title featuring ${childName}",
   "ageRange": "${ageStyle.range}",
-  "characterDescription": "${customHero ? `The main character is ${customHero} — describe their appearance in detail for illustration consistency (color, size, distinctive features, any clothing/accessories)` : appearance ? `${childName}: ${appearance}` : `Detailed locked character description for ${childName}: hair color and style, eye color, skin tone, clothing colors, any distinctive features. Be VERY specific so every illustration looks like the same child.`}",
+  "characterDescription": "${customHero ? `The main character is ${customHero}. Describe their EXACT appearance for illustration consistency: species/type if non-human, body size, fur/skin/scale color and pattern, eye color and shape, any clothing (color, style), distinctive features, accessories. Be extremely specific — e.g. 'A small purple dragon with bright orange eyes, tiny golden wings, wearing a red scarf, round chubby body'.` : appearance ? `${childName}: ${appearance}` : `Locked character description for ${childName} — be VERY SPECIFIC for illustration consistency: exact hair color (e.g. 'dark brown wavy hair in two pigtails'), eye color, skin tone, clothing colors and style (e.g. 'yellow sundress with white polka dots'), any accessories. Every detail must be specific enough that an illustrator could draw the same character 10 times identically.`}",
   "storySummary": "2-3 sentence summary of what happened in this story — used for future episode context",
   "characters": {
     "protagonist": "${childName} description",
@@ -253,14 +253,14 @@ RULES:
   * CAUSE AND EFFECT: each page's action must directly cause what happens on the next page. Page 2 happens BECAUSE of page 1.
   * SHOW THE RESOLUTION: the moment the problem is solved must be written out fully — the hero physically does the thing. Never skip to the celebration without showing the action that caused it. Wrong: "Everyone cheered!" Right: "${childName} placed the cheese on the pizza. It melted perfectly. Tony smiled wide."` : ""}
 - ILLUSTRATION PROMPTS — this is critical for visual consistency:
-  * Every illustrationPrompt MUST follow this exact format: "[CHARACTER DESCRIPTION] is [DOING WHAT] in/at [SPECIFIC LOCATION]. [SUPPORTING CHARACTERS if any]. [MOOD/LIGHTING]. [KEY VISUAL DETAILS]."
-  * Example: "A girl with curly red hair, green eyes, yellow raincoat is climbing a giant mushroom in an enchanted forest. A small blue rabbit watches from below. Warm golden light. Magical and whimsical."
-  * Be SPECIFIC about the action — not "standing in a forest" but "running through tall purple mushrooms, arms outstretched"
-  * Include the EXACT setting from that page's story — each page should show a DIFFERENT scene within the SAME world
-  * Describe the EMOTION on the character's face — surprised, delighted, determined, curious
-  * Always include lighting/atmosphere: warm sunset, cozy candlelight, bright sunny meadow, misty morning
-  * SAME character appearance every page — same hair, same clothes, same features. Copy the characterDescription exactly.
-  * LOCK THE VISUAL WORLD: on page 1, define the color palette and art style. Every subsequent illustrationPrompt must reference the same colors, textures, and visual elements to maintain consistency.${isFamilyPlus && ageNum <= 4 ? `
+  * Every illustrationPrompt MUST follow this exact format: "[EXACT CHARACTER DESCRIPTION from characterDescription field] is [DOING WHAT — specific action with emotion] in/at [SPECIFIC LOCATION with details]. [SUPPORTING CHARACTERS with their appearance]. [LIGHTING AND ATMOSPHERE]. [KEY VISUAL DETAILS that make this page unique]."
+  * Example: "A girl with dark brown wavy hair in two pigtails, green eyes, light skin, yellow sundress with white polka dots is climbing a giant red mushroom with delight on her face in an enchanted forest with glowing blue trees. A small white rabbit with pink eyes watches from below. Warm golden morning light filters through the trees. Sparkling magical particles float in the air."
+  * COPY the characterDescription EXACTLY into every illustrationPrompt — same hair, same eyes, same skin, same clothes, every time. Do not abbreviate or paraphrase.
+  * Be SPECIFIC about the action — not "standing in a forest" but "running through tall purple mushrooms, arms outstretched, laughing"
+  * Describe the EXACT EMOTION on the character's face — wide grin, eyes wide with surprise, furrowed brow of determination
+  * Always include lighting/atmosphere: warm sunset glow, cozy candlelight, bright sunny meadow, cool misty morning
+  * LOCK THE VISUAL WORLD: establish the color palette on page 1 (e.g. "warm amber and green palette"). Reference it on every subsequent page.
+  * Each page should show a DIFFERENT action/moment but in the SAME visual world${isFamilyPlus && ageNum <= 4 ? `
 - TAPPABLE ELEMENTS — for each page include ONE tappable element that fits the scene naturally:
   * emoji: a single emoji representing the tappable object (animal, vehicle, instrument, nature element)
   * soundDescription: a short vivid description for sound generation, e.g. "a duck quacking twice, cheerful and soft" or "a tiny bell ringing once, bright and clear" or "rain drops falling on leaves, gentle pitter patter"
@@ -330,17 +330,36 @@ async function uploadImageToStorage(base64Data, storyId, pageIndex) {
   }
 }
 
-async function generateImage(prompt, characterDescription, style, attempt) {
+async function generateImage(prompt, characterDescription, style, attempt, worldDescription) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
+
+  // Build a rigid character lock block — repeat the exact description every time
+  const characterLock = characterDescription
+    ? `CHARACTER DESCRIPTION (copy EXACTLY every page — same hair color, same eye color, same skin tone, same clothing, same size): ${characterDescription}.`
+    : "";
+
+  // Visual world anchor — inject from page 1 onwards to maintain palette/setting consistency
+  const worldLock = worldDescription
+    ? `VISUAL WORLD (maintain these exact visual elements throughout): ${worldDescription}.`
+    : "";
+
+  const fullPrompt = [
+    stylePrompt,
+    "CHILDREN'S BOOK ILLUSTRATION — FULL PAGE.",
+    characterLock,
+    worldLock,
+    `SCENE: ${prompt}`,
+    "CRITICAL CONSISTENCY RULES:",
+    "- The main character must look IDENTICAL to the CHARACTER DESCRIPTION above — same face, same hair, same clothes, same proportions",
+    "- Same art style, same color palette, same line weight as described in the style",
+    "- Show the character ACTIVELY doing the described action with a clear expressive emotion",
+    "- NO text, letters, words, numbers, or signs anywhere in the image",
+    "- Full color illustration. Strong focal point. Child-friendly. Expressive faces.",
+    "- Same lighting style and color temperature throughout the story",
+  ].filter(Boolean).join(" ");
+
   try {
-    const fullPrompt = stylePrompt +
-      " ILLUSTRATION FOR A CHILDREN'S BOOK PAGE. " +
-      "The main character: " + characterDescription + ". " +
-      "Scene: " + prompt + ". " +
-      "IMPORTANT: Draw exactly what is described. Show the character actively doing the action described. " +
-      "Keep the same character appearance as described. Child-friendly illustration. No text, letters, or words anywhere in the image. " +
-      "Full color. Clear focal point. Expressive faces.";
     const response = await axios.post(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" + process.env.GEMINI_KEY,
       {
@@ -353,13 +372,12 @@ async function generateImage(prompt, characterDescription, style, attempt) {
     const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith("image/"));
     if (!imagePart) throw new Error("No image in response");
     console.log("    Image ready! size: " + imagePart.inlineData.data.length);
-    // Return raw base64 (no data URI prefix) — uploadImageToStorage handles both forms
     return "data:" + imagePart.inlineData.mimeType + ";base64," + imagePart.inlineData.data;
   } catch (e) {
     if (e.response?.status === 429 && attempt < 3) {
       console.log("    Rate limited, waiting 10s...");
       await sleep(10000);
-      return generateImage(prompt, characterDescription, style, attempt + 1);
+      return generateImage(prompt, characterDescription, style, attempt + 1, worldDescription);
     }
     throw e;
   }
@@ -588,7 +606,7 @@ app.post("/generate-full-story", async (req, res) => {
     await updateProgress(20, "illustrating");
 
     // ── Cover image ──────────────────────────────────────────────────────────
-    const coverPrompt = `A beautiful storybook cover illustration for a children's book titled "${storyData.title}". The main character is ${storyData.characterDescription || childName}. Magical, warm, inviting cover art with the feeling of a classic picture book. Centered composition, rich colors, whimsical atmosphere.`;
+    const coverPrompt = `A beautiful storybook cover illustration for a children's book titled "${storyData.title}". CHARACTER (copy exactly): ${storyData.characterDescription || childName}. Magical, warm, inviting cover art. Centered composition, rich colors, whimsical atmosphere. The character is featured prominently in the center, looking adventurous and welcoming. NO text or letters anywhere.`;
     console.log("  Cover image...");
     let coverImageUrl = null;
     try {
@@ -613,14 +631,30 @@ app.post("/generate-full-story", async (req, res) => {
 
     // ── Page images — sequential ─────────────────────────────────────────────
     const imageUrls = [];
+    let worldDescription = null; // Built from page 1, injected into all subsequent pages
+
     for (let i = 0; i < storyData.pages.length; i++) {
       console.log("  Image " + (i + 1) + "/" + storyData.pages.length + "...");
       await updateProgress(20 + Math.round((i / storyData.pages.length) * 45), "illustrating");
+
+      // Build world description from page 1's illustration prompt
+      // Extract palette/setting/mood to anchor all subsequent images
+      if (i === 0) {
+        const p1 = storyData.pages[0].illustrationPrompt || "";
+        // Pull out lighting, palette, and location cues from page 1
+        const lightingMatch = p1.match(/(warm|soft|bright|golden|cozy|misty|sunny|dark|dreamy|glowing)[^.]*light[^.]*/i);
+        const settingMatch = p1.match(/(?:in|at|inside|outside)\s+(?:a|an|the)\s+[^,.]+/i);
+        worldDescription = [
+          lightingMatch ? `Lighting: ${lightingMatch[0].trim()}` : null,
+          settingMatch ? `Main setting: ${settingMatch[0].trim()}` : null,
+          `Art style consistency: same color palette, same line style, same overall visual tone as established on page 1`,
+        ].filter(Boolean).join(". ");
+      }
+
       let url = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const base64 = await generateImage(storyData.pages[i].illustrationPrompt, storyData.characterDescription, imgStyle);
-          // FIX: always upload to storage — never store raw base64
+          const base64 = await generateImage(storyData.pages[i].illustrationPrompt, storyData.characterDescription, imgStyle, undefined, worldDescription);
           url = await uploadImageToStorage(base64, genId, i + 1);
           if (!url) console.warn(`  Page ${i+1} storage upload failed, imageUrl will be null`);
           break;
