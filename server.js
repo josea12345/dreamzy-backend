@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "elevenlabs-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "elevenlabs-v3" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -374,7 +374,7 @@ const ELEVENLABS_LANG_CODES = {
 const NARRATORS = {
   rachel:   { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",   desc: "Warm & calm",      gender: "female" },
   matilda:  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda",  desc: "Gentle & friendly", gender: "female" },
-  aria:     { id: "9BWtsMINqrJLrRacOk9x", name: "Aria",     desc: "Soft & expressive",  gender: "female" },
+  george:   { id: "JBFqnCBsd6RMkjVDRZzb", name: "George",   desc: "Warm British",       gender: "male"   },
   charlotte:{ id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte",desc: "Soothing & rich",   gender: "female" },
   bill:     { id: "pqHfZKP75CvOlQylNhV4", name: "Bill",     desc: "Warm & deep",        gender: "male"   },
   callum:   { id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum",   desc: "Fun & energetic",    gender: "male"   },
