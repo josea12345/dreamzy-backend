@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "elevenlabs-v3" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "preview-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -500,6 +500,37 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
     console.error("Email failed:", e.message);
   }
 }
+
+app.post("/preview-story", async (req, res) => {
+  const { childName, age, interests, theme, mood, lesson, customHero, language } = req.body;
+  const ageNum = parseInt(age) || 5;
+  const interestList = (interests || []).join(", ");
+  const lang = LANGUAGE_CONFIG[language] || LANGUAGE_CONFIG.en;
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 300,
+      system: `You are a children's book author. Given a child's details, generate a short story preview.
+${lang.instruction ? `LANGUAGE: ${lang.instruction} Write the preview in that language.` : ""}
+Return ONLY valid JSON with no markdown:
+{
+  "title": "An engaging story title featuring ${customHero || childName}",
+  "synopsis": "2-3 sentences describing what this story will be about. Make it sound magical and exciting. Mention the child's name and key interests.",
+  "hook": "A single teaser line that ends with intrigue — like a book back cover."
+}`,
+      messages: [{ role: "user", content: `Child: ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}.${lesson ? ` Lesson: ${lesson}.` : ""}${customHero ? ` Hero: ${customHero}.` : ""}` }],
+    });
+    const text = response.content.map(b => b.text || "").join("");
+    const cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: "No preview generated" });
+    const preview = JSON.parse(match[0]);
+    res.json(preview);
+  } catch (e) {
+    console.error("Preview error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.post("/generate-full-story", async (req, res) => {
   const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, language, narrator, plan } = req.body;
