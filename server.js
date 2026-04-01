@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "classroom-v2" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "age-groups-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -37,72 +37,124 @@ const STYLE_PROMPTS = {
   manga: "STYLE: manga children's illustration. Bold clean black outlines. Expressive large eyes. Dynamic action poses. Speed lines for movement. Black and white with selective color accents. Panel-like composition. Like a Japanese children's manga. NO photorealism. NO western cartoon style.",
 };
 
+// Map age group ID (e.g. "3-4") to a numeric age for logic checks
+function resolveAge(age) {
+  const map = { "0-1":0, "1-2":1, "3-4":3, "4-5":4, "5-6":5, "6-8":6, "8-10":8 };
+  const n = parseInt(age);
+  if (!isNaN(n)) return n; // legacy numeric ages still work
+  return map[age] ?? 5;
+}
+
 function getAgeStyle(age, pageCountOverride) {
-  if (age <= 3) return {
-    range: "1-3", pages: pageCountOverride || 5,
-    style: `STYLE: Ages 1-3. Draw from these masters: Eric Carle, Sandra Boynton, Margaret Wise Brown, Rod Campbell, Julia Donaldson, Bill Martin Jr., Mo Willems (simple toddler style), Mem Fox.
+  const ageNum = resolveAge(age);
 
-WHAT MAKES GREAT TODDLER BOOKS — use ALL of these:
-- REPETITION is everything: repeat key phrases across pages like a musical refrain ("Brown bear, brown bear, what do you see?"). Toddlers love hearing the same thing again.
-- RHYTHM & SOUND: every line should have a beat you can clap to. Use rhyme, alliteration, animal sounds, silly words, onomatopoeia (moo, splat, whoosh, boom).
-- ULTRA SHORT lines: 1-2 lines per page MAXIMUM. 4-6 words each. No complex sentences. No clauses.
-- SIMPLE vocabulary: only words a 2-year-old knows. No metaphors. Concrete, tangible things.
-- FAMILIAR worlds: animals, food, bath time, bedtime routine, family, toys, colors, counting.
-- INTERACTIVE feel: write as if the child can respond — ask simple questions ("Can you moo like a cow?"), invite participation.
-- BRIGHT clear moments: each page = one clear image. One animal. One action. One color.
-- WARM ending: a hug, a laugh, a satisfying return home. Simple joy. Not sleep — accomplishment.
-- EMOTIONAL simplicity: happy, surprised, silly, cozy. No complex feelings.
-- MODEL LINES to inspire you: "Moo maa la la la!" / "Goodnight moon, goodnight cow jumping over the moon" / "I see a red bird! Do you?" / "The caterpillar ate ONE apple. But he was still hungry." / "Barnyard dance! Stomp your feet!"`,
+  if (ageNum <= 0) return {
+    range: "0-1", pages: pageCountOverride || 5,
+    style: `STYLE: Ages 0-1 (Infants). Draw from: Eric Carle (Very Hungry Caterpillar), Mem Fox, Sandra Boynton.
+
+INFANT BOOK RULES — every rule is non-negotiable:
+- MAXIMUM 2 WORDS PER PAGE — often just 1. "Big dog." "Red ball." "Night night." That's it.
+- ONE CONCEPT PER PAGE: one object, one color, one animal, one sound. Never two concepts on the same page.
+- SENSORY LANGUAGE: describe textures, sounds, and sensations. "Soft bunny." "Boom boom drum." "Splish splash."
+- HIGH CONTRAST FOCUS: write prompts that suggest bold, simple images with high contrast (bright colors on dark backgrounds or vice versa).
+- STANDALONE PAGES: each page works independently. There is no plot. This is object/concept recognition only.
+- REPETITION: use the same sentence structure every page. "I see a ___." "Touch the ___." "Big ___."
+- SOUNDS: include animal sounds, action sounds. "Moo!" "Woof!" "Splash!"
+- WARM SIMPLE ENDING: end with something cozy — "Night night." "All done." "Hug."`,
   };
-  if (age <= 4) return {
-    range: "3-4", pages: pageCountOverride || 5,
-    style: `STYLE: Ages 3-4. Draw from these masters: Dr. Seuss, Julia Donaldson (Gruffalo), Mo Willems (Elephant & Piggie), Karma Wilson (Bear Snores On), Mem Fox.
 
-WHAT MAKES GREAT BOOKS FOR 3-4 YEAR OLDS — use ALL of these:
+  if (ageNum <= 1) return {
+    range: "1-2", pages: pageCountOverride || 5,
+    style: `STYLE: Ages 1-2 (Toddlers). Draw from: Eric Carle, Sandra Boynton, Karen Katz, Leslie Patricelli.
+
+TODDLER BOOK RULES:
+- 1-3 WORDS PER PAGE. Short phrases only. "Dog runs!" "Big splash!" "Night night, bear."
+- ONE CONCEPT PER PAGE: one action, one object, one routine step. Never more.
+- REPETITION IS EVERYTHING: repeat the same phrase or structure every page with small variations. "Bear eats. Bear plays. Bear sleeps."
+- FAMILIAR ROUTINES: bath time, meal time, bedtime, getting dressed. Toddlers love what they know.
+- INTERACTIVE FEEL: write as if the child can respond. "Where's the duck?" "Can you clap?" "Your turn!"
+- SIMPLE SOUNDS: animal sounds, action sounds, silly words. "Moo! Cluck! Splash! Boom!"
+- WARM ENDING: return to something safe and familiar. A hug, a bed, a parent.
+- NO PLOT: this is not a story with conflict. It's a sequence of familiar moments.`,
+  };
+
+  if (ageNum <= 3) return {
+    range: "3-4", pages: pageCountOverride || 5,
+    style: `STYLE: Ages 3-4 (Preschool). Draw from: Dr. Seuss, Julia Donaldson (The Gruffalo), Mo Willems (Elephant & Piggie), Karma Wilson (Bear Snores On), Mem Fox.
+
+WHAT MAKES GREAT PRESCHOOL BOOKS — use ALL of these:
 - RHYME & RHYTHM: AABB or ABAB schemes. Every page flows musically when read aloud. Clap-able beats.
 - REPETITION WITH VARIATION: a repeated phrase that changes slightly for comic or dramatic effect each time.
 - HUMOR: silly logic, unexpected turns, characters who get things hilariously wrong.
 - SIMPLE EMOTIONS made BIG: fear → courage. Alone → friendship. One clear emotional journey per story.
 - DIALOGUE: characters talk to each other. Give them distinct voices. Speech makes it come alive.
 - CLEAR ARC: problem → 2 funny attempts → clever solution → warm triumphant ending.
-- SHORT lines: 2-3 lines per page. Max 8 words per line.
+- 1-3 SHORT LINES per page. Max 8 words per line.
 - CHILD AS HERO: the child-character solves the problem themselves — not adults.
-- COZY TONE: warm, safe, rhythmic. Like Karma Wilson — the world is gentle and funny.
 - MODEL LINES: "Bear snores on." / "I do not like them, Sam-I-Am!" / "He wasn't scared. Not even a little bit. (He was very scared.)"`,
   };
-  if (age <= 5) return {
-    range: "4-5", pages: pageCountOverride || 6,
-    style: `STYLE: Ages 4-5. Draw from these masters: Mo Willems (Don't Let the Pigeon!), Julia Donaldson, Dav Pilkey, Oliver Jeffers, Adam Rubin (Dragons Love Tacos), Robert Munsch.
 
-WHAT MAKES GREAT BOOKS FOR 4-5 YEAR OLDS — use ALL of these:
-- ACTUAL PLOT: beginning → clear problem → escalating attempts → surprising resolution. Kids this age can follow a full story arc. Every page must move the plot forward — not just describe.
-- HUMOR & CHAOS: big silly energy. Characters who overreact. Absurd situations. Things going hilariously wrong in specific, visual ways.
-- INTERACTIVE VOICE: speak directly to the reader. "Don't turn the page!" / "You won't believe what happened next." / "Can you help?" Break the fourth wall once per story for maximum impact.
-- STRONG CHARACTER PERSONALITY: give the main character one defining trait (greedy, dramatic, brave, clumsy) and let it drive every decision they make. Their personality IS the plot.
-- DIALOGUE-DRIVEN: most of the storytelling through speech. Short punchy exchanges. Funny misunderstandings that the reader can see coming before the character does.
-- 2-3 lines per page. Up to 10 words per line. Varied rhythm — short punchy lines followed by one longer revelation.
-- CAUSE AND EFFECT CHAIN: each page action directly causes the next. If you can remove a page without affecting the story, rewrite it.
-- SATISFYING CALLBACK: the ending must echo something from page 1 — a repeated phrase, a returned object, a reversed situation.
-- MODEL LINES: "The pigeon REALLY wants to drive the bus." / "Oh no. Oh no no no." / "That is the funniest thing I have EVER seen." / "And that's when things got very, very weird."`,
+  if (ageNum <= 4) return {
+    range: "4-5", pages: pageCountOverride || 6,
+    style: `STYLE: Ages 4-5 (Pre-K). Draw from: Mo Willems (Don't Let the Pigeon!), Julia Donaldson, Dav Pilkey, Oliver Jeffers, Adam Rubin (Dragons Love Tacos), Robert Munsch.
+
+WHAT MAKES GREAT PRE-K BOOKS — use ALL of these:
+- ACTUAL PLOT: beginning → clear problem → escalating attempts → surprising resolution. Kids this age can follow a full story arc. Every page must move the plot forward.
+- HUMOR & CHAOS: big silly energy. Characters who overreact. Absurd situations. Things going hilariously wrong.
+- INTERACTIVE VOICE: speak directly to the reader. "Don't turn the page!" / "Can you help?" Break the fourth wall once for maximum impact.
+- STRONG CHARACTER PERSONALITY: one defining trait (greedy, dramatic, brave, clumsy) drives every decision.
+- DIALOGUE-DRIVEN: most storytelling through speech. Short punchy exchanges. Funny misunderstandings.
+- 2-3 lines per page. Up to 10 words per line.
+- CAUSE AND EFFECT: each page action directly causes the next.
+- SATISFYING CALLBACK: the ending echoes something from page 1.
+- MODEL LINES: "The pigeon REALLY wants to drive the bus." / "Oh no. Oh no no no." / "And that's when things got very, very weird."`,
   };
-  return {
-    range: "5-10", pages: pageCountOverride || 7,
-    style: `STYLE: Ages 5-10. Draw from these masters: Roald Dahl, Mary Pope Osborne (Magic Tree House), Arnold Lobel (Frog & Toad), Beverly Cleary, Jeff Kinney (tone), Kate DiCamillo.
+
+  if (ageNum <= 5) return {
+    range: "5-6", pages: pageCountOverride || 6,
+    style: `STYLE: Ages 5-6 (Kindergarten). Draw from: Mo Willems, Arnold Lobel (Frog & Toad), Cynthia Rylant (Henry & Mudge), Kevin Henkes, Tomie dePaola.
+
+WHAT MAKES GREAT KINDERGARTEN BOOKS — use ALL of these:
+- FULLER NARRATIVE: a real story with beginning, middle, and end. Kids this age can track a complete arc across many pages.
+- 3-5 SENTENCES PER PAGE: longer than pre-k but still clear and direct. Each sentence earns its place.
+- EARLY CHAPTER FEEL: can include 1-2 mini-scenes or a B-plot that resolves alongside the main story.
+- EMOTIONAL DEPTH: characters can feel conflicted, embarrassed, proud. Go beyond simple happy/sad.
+- FRIENDSHIP AS THE HEART: the relationship between two characters drives most great books at this age.
+- SHOW DON'T TELL: "Her hands shook" not "She was scared." "He looked at his feet" not "He felt bad."
+- MODEL LINES: "Frog and Toad were friends." / "Henry was a big dog." / "It was going to be a very good day." / "Sheila Rae was never afraid."`,
+  };
+
+  if (ageNum <= 6) return {
+    range: "6-8", pages: pageCountOverride || 8,
+    style: `STYLE: Ages 6-8 (Early Reader). Draw from: Arnold Lobel, Beverly Cleary, Cynthia Rylant, Kate DiCamillo (Mercy Watson), Jeff Kinney (tone), Mary Pope Osborne.
 
 WHAT MAKES GREAT EARLY READER BOOKS — use ALL of these:
-- STRONG NARRATIVE ARC: clear setup → rising tension → climax → satisfying resolution. Every single page must move the plot or character forward. If a page doesn't do either — cut it.
-- CHARACTER GROWTH: the hero must be different on the last page than the first. The change must feel EARNED through what they experienced — not stated, shown.
-- REAL CONFLICT with genuine stakes: something the child actually cares about could be lost. The problem must matter emotionally, not just logically.
-- WIT & HUMOR: jokes kids feel SMART for understanding. Irony, wordplay, characters who are funny because they're flawed in specific recognizable ways.
-- VARIED sentences: short punchy lines mixed with longer descriptive ones. 3-5 lines per page, up to 14 words. Never two identical sentence structures in a row.
-- VIVID SPECIFIC details: not "a big tree" but "a tree so old its roots had swallowed the garden wall." Not "she was scared" but "her hands wouldn't stop shaking."
-- FRIENDSHIP & STAKES: the hero must care about someone else. What they risk losing must involve that relationship.
-- THE CHILD'S INTERESTS drive the plot — interests are not decoration, they ARE the adventure. If the interest is dinosaurs, the solution to the problem involves dinosaur knowledge.
-- DIALOGUE reveals character — how people talk tells us who they are. Each character should sound distinct.
-- OPEN WORLD: hint at more adventures to come. Leave something unresolved or a new door opened.
-- MODEL LINES: "James had never seen such a thing in all his life." / "Frog and Toad were friends." / "The Magic Tree House began to spin." / "Something amazing was about to happen."`,
+- STRONG NARRATIVE ARC: clear setup → rising tension → climax → satisfying resolution. Every page moves the plot or character forward.
+- CHARACTER GROWTH: the hero must change by the end. The change must be EARNED — shown through actions, not stated.
+- REAL CONFLICT with genuine stakes: something the child cares about could be lost.
+- WIT & HUMOR: jokes kids feel smart for understanding. Irony, wordplay, characters funny because they're flawed.
+- 3-5 sentences per page, up to 12 words each. Varied rhythm — short punchy lines mixed with longer descriptions.
+- VIVID SPECIFIC details: not "a big tree" but "a tree so old its roots had swallowed the garden wall."
+- DIALOGUE reveals character — how people talk tells us who they are. Each character sounds distinct.
+- MODEL LINES: "Frog and Toad were friends." / "The Magic Tree House began to spin." / "Mercy Watson was not an ordinary pig."`,
+  };
+
+  return {
+    range: "8-10", pages: pageCountOverride || 8,
+    style: `STYLE: Ages 8-10 (Reader). Draw from: Roald Dahl, Mary Pope Osborne (Magic Tree House), Judy Blume, Jeff Kinney, Kate DiCamillo, Rick Riordan (tone).
+
+WHAT MAKES GREAT CHAPTER-STYLE BOOKS — use ALL of these:
+- COMPLEX PLOT: setup → rising stakes → midpoint complication → darkest moment → earned resolution. Every page earns its place.
+- DEEP CHARACTER: the hero has flaws, contradictions, and real growth. By the last page they are visibly different.
+- REAL STAKES: something the child deeply cares about — a friendship, a home, a dream — is genuinely at risk.
+- VOICE & HUMOR: a distinct narrative voice the reader can hear. Jokes that reward intelligence. Characters funny because they're human.
+- 4-6 sentences per page, varied length. Rich sensory details that put you in the scene.
+- SUBPLOTS: a secondary character or relationship that mirrors or contrasts the main arc.
+- THE INTERESTS drive the plot — they're not decoration, they're the solution to the central problem.
+- MODEL LINES: "James had never seen such a thing in all his life." / "It's a funny thing about mothers and fathers." / "Something amazing was about to happen."`,
   };
 }
+
 
 const LANGUAGE_CONFIG = {
   en:    { name: "English",                  coverPhrase: "A story for",         instruction: "",                                                                                                                         sleepWords: /\b(sleep|sleeping|slept|slumber|yawn|yawning|dream|dreaming|dreamed|dreamt|drift|drifting|drifted|doze|dozing|dozed|snooze|snoozing|snoozed|fell asleep|fast asleep|closed (their|her|his) eyes|night-night|nighty|bedtime|tucked in|tuck(ed)? in|rest(ed)?|nap|napping)\b/i },
@@ -191,8 +243,8 @@ CRITICAL: ${childName||"The hero"}'s internal growth must mirror the external pl
 
 async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom) {
   const interestList = interests.join(", ");
-  const ageNum = parseInt(age) || 5;
-  const ageStyle = getAgeStyle(ageNum, options?.pageCount);
+  const ageNum = resolveAge(age);
+  const ageStyle = getAgeStyle(age, options?.pageCount);
   const pageBlueprint = getPageBlueprint(ageStyle.pages, justWatching && customHero ? customHero : childName);
   const lang = LANGUAGE_CONFIG[language] || LANGUAGE_CONFIG.en;
   const languageInstruction = lang.instruction
@@ -547,7 +599,7 @@ async function sendStoryEmail(email, childName, storyTitle, shareUrl) {
 
 app.post("/preview-story", async (req, res) => {
   const { childName, age, interests, theme, mood, lesson, customHero, language } = req.body;
-  const ageNum = parseInt(age) || 5;
+  const ageNum = resolveAge(age);
   const interestList = (interests || []).join(", ");
   const lang = LANGUAGE_CONFIG[language] || LANGUAGE_CONFIG.en;
   try {
@@ -586,7 +638,7 @@ app.post("/generate-full-story", async (req, res) => {
   console.log("Using illustration style:", imgStyle, "| Language:", lang, "| Narrator:", narratorKey, "| Plan:", plan, "| Mode:", activeStoryMode);
   if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
   if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
-  const ageNum = parseInt(age) || 5;
+  const ageNum = resolveAge(age);
 
   try {
     const isContinuation = !!previousStory;
@@ -797,7 +849,7 @@ app.post("/generate-full-story", async (req, res) => {
 app.post("/regenerate-audio", async (req, res) => {
   const { pages, age, language, narrator, storyMode } = req.body;
   if (!pages?.length) return res.status(400).json({ error: "No pages" });
-  const ageNum = parseInt(age) || 5;
+  const ageNum = resolveAge(age);
   const lang = language || "en";
   const narratorKey = narrator || DEFAULT_NARRATOR;
   const activeMode = storyMode || "daytime";
@@ -821,7 +873,7 @@ app.post("/regenerate-audio", async (req, res) => {
 
 app.post("/regenerate-sfx", async (req, res) => {
   const { pages, age } = req.body;
-  const ageNum = parseInt(age) || 5;
+  const ageNum = resolveAge(age);
   if (ageNum > 4) return res.json({ sfxUrls: [] });
   if (!pages?.length) return res.status(400).json({ error: "No pages" });
   try {
