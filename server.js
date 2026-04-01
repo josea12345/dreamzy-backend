@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "age-groups-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lessons-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -241,6 +241,25 @@ CRITICAL: Every page must earn its place. Ask for each page: "what does this rev
 CRITICAL: ${childName||"The hero"}'s internal growth must mirror the external plot. By page ${pageCount} they are different from page 1.`;
 }
 
+// Concept lessons need structural integration, not just "weaving in"
+const CONCEPT_LESSONS = {
+  letters: `- CONCEPT LESSON — LETTERS/ABC: This story must be built around the alphabet. Each page introduces a new letter through the story. The character encounters something that starts with that letter. E.g. page 1: "A is for Apple — the hero finds a big red apple." page 2: "B is for Bear — a friendly bear waves hello." Use the letter prominently on each page. The story's journey IS the alphabet journey. Make it playful and visual.`,
+  numbers: `- CONCEPT LESSON — NUMBERS: This story must teach counting. Each page introduces a new number through the story. The character counts objects they find or collect. E.g. "One shiny star." "Two fluffy clouds." "Three little frogs." Each page = one number, one clear countable thing. The story's journey IS the counting journey. Numbers 1-5 for very young, 1-10 for older.`,
+  colors: `- CONCEPT LESSON — COLORS: Each page introduces a new color through the story. The character encounters something vivid in that color. E.g. "A big RED apple fell from the tree." "A BLUE butterfly landed on their nose." Make the color the star of each page. The illustrationPrompt must emphasize that color strongly.`,
+  shapes: `- CONCEPT LESSON — SHAPES: Each page introduces a new shape through the story. The character finds or uses an object in that shape. E.g. "A CIRCLE moon lit up the sky." "A SQUARE window showed the stars." Make the shape obvious in both text and illustration prompt.`,
+  routines: `- CONCEPT LESSON — ROUTINES: This story follows a daily routine step by step. Each page = one step in the routine (wake up, brush teeth, get dressed, eat breakfast, etc.). The character does each step with joy. The story IS the routine — predictable, warm, reassuring. Perfect for children learning their daily schedule.`,
+  body: `- CONCEPT LESSON — BODY PARTS: Each page introduces a new body part through the story. The character uses that body part to do something. E.g. "With her HANDS she clapped along." "With his FEET he stomped in puddles." Make each body part the clear focus of the page.`,
+  food: `- CONCEPT LESSON — FOOD: Each page introduces a different food through the story. The character tries, finds, or cooks each food. Name the food clearly, describe its color and texture. Make food joyful and adventurous, not preachy.`,
+  animals: `- CONCEPT LESSON — ANIMALS: Each page features a different animal. The character meets the animal and learns one simple fact (sound it makes, where it lives, what it eats). E.g. "The COW said MOO and lived on the farm." Keep it simple, playful, and factual.`,
+};
+
+function buildLessonInstruction(lesson, ageNum) {
+  // Concept lessons — need structural integration
+  if (CONCEPT_LESSONS[lesson]) return CONCEPT_LESSONS[lesson];
+  // Value lessons — weave in organically
+  return `- LESSON: Weave "${lesson}" into the story organically — through what the character DOES and EXPERIENCES, not through characters stating it out loud or explaining it. The lesson should be felt, not taught.`;
+}
+
 async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom) {
   const interestList = interests.join(", ");
   const ageNum = resolveAge(age);
@@ -298,7 +317,7 @@ RULES:
 - Follow the PAGE-BY-PAGE STRUCTURE above exactly. Each page must do what its blueprint says.
 - Use ${childName}'s name naturally — not on every single line, just when it feels right
 - INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}
-- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n- LESSON: Weave "${lesson}" into the story organically — through what happens, not through characters saying it out loud.` : ""}
+- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n${buildLessonInstruction(lesson, ageNum)}` : ""}
 - ${storyModeInstructions}
 - NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible", "joyfully", "beautifully", "amazing". Use simple direct language. Show don't tell.
 - EVERY sentence must sound natural when read aloud to a child. Test each line: would a parent read it naturally to a sleepy child? If not, rewrite it.
