@@ -22,7 +22,7 @@ const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABAS
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // FIX: bump version so we can confirm Railway deployed this
-app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "lessons-v1" }));
+app.get("/", (req, res) => res.json({ status: "Dreamzy running", version: "trial-v1" }));
 
 const STYLE_PROMPTS = {
   cartoon: "STYLE: bold cartoon illustration. Thick black outlines. Bright saturated flat colors. Pixar and Bluey inspired. Large expressive eyes. Simplified shapes. NO photorealism. NO watercolor. NO sketchy lines.",
@@ -926,22 +926,49 @@ app.post("/webhook/lemonsqueezy", async (req, res) => {
   const eventName = payload.meta?.event_name;
   const customerEmail = payload.data?.attributes?.user_email;
   const status = payload.data?.attributes?.status;
-  console.log("Webhook received:", eventName, customerEmail);
+  const productName = (payload.data?.attributes?.product_name || "").toLowerCase();
+  const trialEndsAt = payload.data?.attributes?.trial_ends_at || null;
+  console.log("Webhook received:", eventName, customerEmail, "status:", status, "product:", productName);
   if (!customerEmail) return res.status(200).json({ received: true });
+
+  // Detect plan from product name
+  function detectPlan(name) {
+    if (name.includes("classroom pro")) return "classroom_pro";
+    if (name.includes("classroom basic") || name.includes("classroom")) return "classroom_basic";
+    if (name.includes("family+") || name.includes("family plus")) return "family_plus";
+    return "family";
+  }
+
   try {
-    if (eventName === "subscription_created" || (eventName === "subscription_updated" && status === "active")) {
-      const productName = payload.data?.attributes?.product_name || "";
-      const plan = productName.toLowerCase().includes("plus") ? "family_plus" : "family";
-      await supabase.from("profiles").update({
-        subscription_status: "paid",
-        plan: plan,
-        lemon_squeezy_customer_id: payload.data?.attributes?.customer_id?.toString()
-      }).eq("email", customerEmail);
-      console.log("Activated subscription for:", customerEmail, "plan:", plan);
+    if (["subscription_created", "subscription_updated"].includes(eventName)) {
+      const isTrial = status === "on_trial";
+      const isActive = status === "active";
+      const isCancelled = status === "cancelled" || status === "expired";
+
+      if (isTrial || isActive) {
+        const plan = detectPlan(productName);
+        await supabase.from("profiles").update({
+          subscription_status: "paid",
+          plan,
+          trial_ends_at: isTrial ? trialEndsAt : null,
+          lemon_squeezy_customer_id: payload.data?.attributes?.customer_id?.toString()
+        }).eq("email", customerEmail);
+        console.log(`${isTrial ? "Trial" : "Subscription"} activated for:`, customerEmail, "plan:", plan, isTrial ? `trial ends: ${trialEndsAt}` : "");
+      }
+
+      if (isCancelled) {
+        await supabase.from("profiles").update({
+          subscription_status: "free",
+          plan: "free",
+          trial_ends_at: null,
+        }).eq("email", customerEmail);
+        console.log("Subscription cancelled for:", customerEmail);
+      }
     }
-    if (eventName === "subscription_cancelled" || (eventName === "subscription_updated" && status === "cancelled")) {
-      await supabase.from("profiles").update({ subscription_status: "free", plan: "free" }).eq("email", customerEmail);
-      console.log("Cancelled subscription for:", customerEmail);
+
+    if (eventName === "subscription_trial_will_end") {
+      // Trial ending soon — could send a reminder email here
+      console.log("Trial ending soon for:", customerEmail);
     }
   } catch (e) { console.error("Webhook error:", e.message); }
   res.status(200).json({ received: true });
