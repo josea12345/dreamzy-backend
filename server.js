@@ -316,8 +316,10 @@ RULES:
 - Generate exactly ${ageStyle.pages} pages — no more, no less
 - Follow the PAGE-BY-PAGE STRUCTURE above exactly. Each page must do what its blueprint says.
 - Use ${childName}'s name naturally — not on every single line, just when it feels right
-- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}
-- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}${lesson ? `\n${buildLessonInstruction(lesson, ageNum)}` : ""}
+${lesson ? `${buildLessonInstruction(lesson, ageNum)}
+- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the SETTING and backdrop only — it flavors the world but the lesson above is the story's core plot driver" : "these interests as the setting and backdrop — they flavor the world but the lesson above is the story's core plot driver. DO NOT let interests override the lesson."}`
+: `- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}`}
+- Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
 - ${storyModeInstructions}
 - NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible", "joyfully", "beautifully", "amazing". Use simple direct language. Show don't tell.
 - EVERY sentence must sound natural when read aloud to a child. Test each line: would a parent read it naturally to a sleepy child? If not, rewrite it.
