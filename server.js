@@ -501,9 +501,9 @@ function formatNarration(lines, ageNum) {
   // Ages 4-5: medium pauses
   // Ages 6+: shorter pauses, more natural flow
   const pauseTime = ageNum <= 3 ? "1.2s" : ageNum <= 5 ? "0.9s" : "0.7s";
-  // Join lines with break tags — max 2 breaks to avoid instability
-  const safeLine = lines.slice(0, 3); // cap at 3 lines for safety
-  return safeLine.join(` <break time="${pauseTime}" /> `);
+  // Join all lines — use fewer/shorter breaks for longer pages to stay stable with ElevenLabs
+  const breakTag = lines.length > 3 ? ` <break time="${Math.min(parseFloat(pauseTime), 0.5)}s" /> ` : ` <break time="${pauseTime}" /> `;
+  return lines.join(breakTag);
 }
 
 async function generateVoice(text, ageNum, language, narratorKey, attempt, storyMode) {
