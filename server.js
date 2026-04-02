@@ -350,11 +350,16 @@ ${lesson ? `${buildLessonInstruction(lesson, ageNum)}
   * Always include lighting/atmosphere: warm sunset glow, cozy candlelight, bright sunny meadow, cool misty morning
   * LOCK THE VISUAL WORLD: establish the color palette on page 1 (e.g. "warm amber and green palette"). Reference it on every subsequent page.
   * Each page should show a DIFFERENT action/moment but in the SAME visual world${isFamilyPlus && ageNum <= 4 ? `
-- TAPPABLE ELEMENTS — for each page include ONE tappable element that fits the scene naturally:
-  * emoji: a single emoji representing the tappable object (animal, vehicle, instrument, nature element)
-  * soundDescription: a short vivid description for sound generation, e.g. "a duck quacking twice, cheerful and soft" or "a tiny bell ringing once, bright and clear" or "rain drops falling on leaves, gentle pitter patter"
-  * Pick something that actually APPEARS in the illustration — not random
-  * Keep sounds short (1-2 seconds), child-friendly, and joyful` : ""}
+- TAPPABLE ELEMENTS — for each page include ONE tappable element that fits the scene:
+  * emoji: a single emoji of something visible in THIS page's illustration
+  * soundDescription: write the EXACT sound that thing would make in this specific scene. Be concrete and story-specific — not generic animal sounds. Examples:
+    - A dragon breathing fire onto a castle gate → "a dragon roaring and breathing fire, intense whoosh and crackle, 1.5 seconds"
+    - A child splashing in a puddle → "loud splashing water, kids giggling, playful, 1 second"
+    - A treasure chest opening → "heavy wooden chest creaking open, coins jingling, magical shimmer, 1.5 seconds"
+    - A rocket launching → "rocket engine igniting and blasting off, powerful roar fading into distance, 2 seconds"
+    - A bear growling in a forest → "large bear growling low and slow, leaves rustling, eerie forest ambience, 1.5 seconds"
+  * The sound must match what is HAPPENING on this page — not just what the object generically sounds like
+  * Keep sounds 1-2 seconds, child-friendly, no scary or violent sounds` : ""}
 - ENDING RULE: The story must NEVER end with the child sleeping, drifting off, closing their eyes, being tucked in, or any form of rest. It ends with joy, triumph, warmth, or satisfaction — awake and happy.`,
     messages: [{ role: "user", content: `Story for ${childName}, age ${ageNum}. Interests: ${interestList}. Theme: ${theme}. Mood: ${mood}.` }],
   });
@@ -563,7 +568,7 @@ async function generateSoundEffect(description, attempt) {
   try {
     const r = await axios.post(
       "https://api.elevenlabs.io/v1/sound-generation",
-      { text: description, duration_seconds: 1.5, prompt_influence: 0.4 },
+      { text: description, duration_seconds: 2.0, prompt_influence: 0.7 },
       { headers: { "xi-api-key": process.env.ELEVENLABS_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" }, responseType: "arraybuffer" }
     );
     return "data:audio/mpeg;base64," + Buffer.from(r.data).toString("base64");
