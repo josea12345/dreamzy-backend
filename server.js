@@ -256,8 +256,14 @@ const CONCEPT_LESSONS = {
 function buildLessonInstruction(lesson, ageNum) {
   // Concept lessons — need structural integration
   if (CONCEPT_LESSONS[lesson]) return CONCEPT_LESSONS[lesson];
-  // Value lessons — weave in organically
-  return `- LESSON: Weave "${lesson}" into the story organically — through what the character DOES and EXPERIENCES, not through characters stating it out loud or explaining it. The lesson should be felt, not taught.`;
+  // Value lessons — must drive the PLOT, not just appear in the background
+  return `- LESSON — THIS IS THE STORY'S CORE: "${lesson}" is not decoration — it IS the plot. Structure the story so the lesson is unavoidable:
+  * Page 1-2: The character faces a situation that REQUIRES them to choose whether to demonstrate "${lesson}" — they haven't learned it yet or are being tested.
+  * Middle pages: The character struggles, fails once, or faces resistance. Show the cost of NOT having "${lesson}". Make it feel real.
+  * Page near end: The character chooses to embrace "${lesson}" — a clear, specific ACTION they take (not a thought or feeling — they DO something).
+  * Final page: The result of that action is shown — another character's reaction, a problem solved, a relationship strengthened. The payoff must be visible and concrete.
+  * NEVER have a character explain the lesson out loud ("I learned that sharing is important"). SHOW it through action and consequence.
+  * The lesson must be the reason the story exists — if you removed "${lesson}" from the plot, the whole story would fall apart.`;
 }
 
 async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom) {
@@ -281,14 +287,16 @@ async function generateStory(childName, age, interests, theme, mood, previousSto
 IMPORTANT — THIS IS A CONTINUATION (Episode ${(previousStory.episode || 1) + 1}):
 Previous story title: "${previousStory.title}"
 What happened before: ${previousStory.story_summary || "An adventure with " + childName}
-Characters established: ${JSON.stringify(previousStory.characters || {})}
+Characters established: ${JSON.stringify(previousStory.characters || {})}${lesson ? `
+Ongoing lesson/theme: This series is teaching "${lesson}" — continue exploring this theme through NEW challenges and situations that reinforce the same lesson. Don't repeat the exact same scenario from episode 1, but the lesson must still be clearly felt and experienced by the character.` : ""}
 
 Rules for continuation:
-- Reference what happened in the previous episode naturally
-- Bring back the same supporting characters (friends, creatures, magical objects)
-- The world and setting should feel consistent and familiar
-- Start with a callback to the previous story ("The next morning..." / "One week later...")
-- End with a hint that another adventure is coming (builds anticipation for episode ${(previousStory.episode || 1) + 2})
+- The TITLE must follow this pattern: "[Original Title] — Episode ${(previousStory.episode || 1) + 1}: [New Subtitle]"
+- Reference what happened in the previous episode naturally in the first 1-2 pages
+- Bring back the same supporting characters (friends, creatures, magical objects) with consistent descriptions
+- The world and setting should feel familiar — same visual language, same tone
+- Start with a callback ("The next morning..." / "One week later..." / "Back in [place from ep 1]...")
+- End with a hint that another adventure is coming
 - This is episode ${(previousStory.episode || 1) + 1} in ${childName}'s ongoing adventures
 ` : "";
 
@@ -302,7 +310,7 @@ ${languageInstruction}
 ${continuationContext}
 Return ONLY valid JSON with no markdown, no code blocks, no explanation before or after:
 {
-  "title": "Catchy episode title featuring ${childName}",
+  "title": "${previousStory ? `${previousStory.title.replace(/: Episode \\d+.*$/,'')} — Episode ${(previousStory.episode||1)+1}: [catchy subtitle]` : `Catchy title featuring ${childName}`}",
   "ageRange": "${ageStyle.range}",
   "characterDescription": "${customHero ? `The main character is ${customHero}. Describe their EXACT appearance for illustration consistency: species/type if non-human, body size, fur/skin/scale color and pattern, eye color and shape, any clothing (color, style), distinctive features, accessories. Be extremely specific — e.g. 'A small purple dragon with bright orange eyes, tiny golden wings, wearing a red scarf, round chubby body'.` : appearance ? `${childName}: ${appearance}` : `Locked character description for ${childName} — be VERY SPECIFIC for illustration consistency: exact hair color (e.g. 'dark brown wavy hair in two pigtails'), eye color, skin tone, clothing colors and style (e.g. 'yellow sundress with white polka dots'), any accessories. Every detail must be specific enough that an illustrator could draw the same character 10 times identically.`}",
   "storySummary": "2-3 sentence summary of what happened in this story — used for future episode context",
@@ -787,7 +795,7 @@ app.post("/generate-full-story", async (req, res) => {
       audioUrls.push(result);
     }
 
-    const seriesId = previousStory?.series_id || (childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now());
+    const seriesId = previousStory?.series_id || previousStory?.seriesId || (childName.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now());
     const episode = previousStory ? (previousStory.episode || 1) + 1 : 1;
     console.log("Story complete! Series: " + seriesId + " Episode: " + episode);
 
