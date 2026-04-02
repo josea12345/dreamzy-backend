@@ -324,9 +324,9 @@ RULES:
 - Generate exactly ${ageStyle.pages} pages — no more, no less
 - Follow the PAGE-BY-PAGE STRUCTURE above exactly. Each page must do what its blueprint says.
 - Use ${childName}'s name naturally — not on every single line, just when it feels right
-${lesson ? `${buildLessonInstruction(lesson, ageNum)}
-- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the SETTING and backdrop only — it flavors the world but the lesson above is the story's core plot driver" : "these interests as the setting and backdrop — they flavor the world but the lesson above is the story's core plot driver. DO NOT let interests override the lesson."}`
-: `- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}`}
+${lesson ? `${buildLessonInstruction(lesson, ageNum)}${interestList ? `
+- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the SETTING and backdrop only — it flavors the world but the lesson above is the story's core plot driver" : "these interests as the setting and backdrop — they flavor the world but the lesson above is the story's core plot driver. DO NOT let interests override the lesson."}` : ""}`
+: interestList ? `- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}` : `- No specific interests provided — choose a setting and world that will delight a ${resolveAge(age)}-year-old based on the theme and mood.`}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
 - ${storyModeInstructions}
 - NATURAL LANGUAGE ONLY: Write like a real children's book author, not an AI. Avoid: "suddenly", "magical adventure", "filled with wonder", "with a smile", "exclaimed", "incredible", "joyfully", "beautifully", "amazing". Use simple direct language. Show don't tell.
@@ -671,7 +671,7 @@ app.post("/generate-full-story", async (req, res) => {
   const activeStoryMode = storyMode || "daytime";
   console.log("Using illustration style:", imgStyle, "| Language:", lang, "| Narrator:", narratorKey, "| Plan:", plan, "| Mode:", activeStoryMode);
   if (!childName && !customHero) return res.status(400).json({ error: "Need child name or custom hero" });
-  if (!interests?.length) return res.status(400).json({ error: "Need at least one interest" });
+  // interests is optional — if empty, let Claude pick what fits the theme/lesson
   const ageNum = resolveAge(age);
 
   try {
