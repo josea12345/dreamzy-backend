@@ -688,7 +688,10 @@ app.post("/generate-full-story", async (req, res) => {
         child_name: childName || customHero || "story",
         age: ageNum, created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        status: "generating", progress: 0, pages: [], language: lang
+        status: "generating", progress: 0, pages: [], language: lang,
+        lesson: lesson || null,
+        series_id: previousStory?.series_id || previousStory?.seriesId || null,
+        episode: previousStory ? (previousStory.episode || 1) + 1 : 1
       });
       if (genError) console.error("Gen insert error:", JSON.stringify(genError));
       else console.log("Generation record created:", genId);
@@ -837,7 +840,10 @@ app.post("/generate-full-story", async (req, res) => {
           child_name: childName || customHero || "story",
           status: "complete",
           progress: 100,
-          // Store storage URLs only — audio is regenerated on read
+          story_summary: storyData.storySummary || null,
+          characters: { ...(storyData.characters || {}), _lesson: lesson || "" },
+          series_id: seriesId,
+          episode,
           pages: finalPages
         }).eq("id", genId);
         console.log("Generation complete:", genId);
