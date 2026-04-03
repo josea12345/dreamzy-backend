@@ -165,15 +165,15 @@ const LANGUAGE_CONFIG = {
   de:    { name: "German",                   coverPhrase: "Eine Geschichte für", instruction: "Write the ENTIRE story in German. Use vocabulary and expressions natural and appropriate for children in Germany.",        sleepWords: /\b(schlafen|schlief|gähnte|träumte|einschlafen|geschlossen die Augen|gute Nacht)\b/i },
 };
 
-async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, attempt) {
+async function generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, progressLevel, attempt) {
   if (attempt === undefined) attempt = 0;
   try {
-    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom);
+    return await generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, progressLevel);
   } catch (e) {
     if ((e.status === 529 || (e.message && e.message.includes("overloaded"))) && attempt < 3) {
       console.log("Anthropic overloaded, retrying in " + (10 + attempt * 10) + "s (attempt " + (attempt+1) + ")...");
       await sleep((10 + attempt * 10) * 1000);
-      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, attempt + 1);
+      return generateStoryWithRetry(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, progressLevel, attempt + 1);
     }
     throw e;
   }
@@ -253,11 +253,20 @@ const CONCEPT_LESSONS = {
   animals: `- CONCEPT LESSON — ANIMALS: Each page features a different animal. The character meets the animal and learns one simple fact (sound it makes, where it lives, what it eats). E.g. "The COW said MOO and lived on the farm." Keep it simple, playful, and factual.`,
 };
 
-function buildLessonInstruction(lesson, ageNum) {
+function buildLessonInstruction(lesson, ageNum, progressLevel) {
   // Concept lessons — need structural integration
   if (CONCEPT_LESSONS[lesson]) return CONCEPT_LESSONS[lesson];
-  // Value lessons — must drive the PLOT, not just appear in the background
+
+  // Adaptive narrative arc based on how many times child has heard stories about this lesson
+  const level = progressLevel || 1;
+  const arcInstruction = level >= 3
+    ? `NARRATIVE ARC — HERO LEVEL (Story #${level}): The child character has grown. They now face this challenge ALONE and succeed through their own strength. No adult rescues them. No friend carries them. They draw on an internal resource they've been building. The moment of triumph is entirely theirs. Make the reader feel: "They did it themselves." This is the payoff arc.`
+    : level === 2
+    ? `NARRATIVE ARC — GROWING LEVEL (Story #${level}): The child character tries harder than before. They stumble, self-correct, and partially succeed on their own. A friend or guide may offer one small nudge — but the child makes the final choice and takes the final action. Show their growing independence. The reader should feel: "They're almost there."`
+    : `NARRATIVE ARC — INTRODUCTION LEVEL (Story #${level}): This is the child's first encounter with this challenge. A wise friend, animal, or guide models the right response for them. The child watches, tries, struggles, and with gentle help succeeds. The lesson is introduced warmly — not preachy. Plant a seed. The reader should feel: "Oh, that's how it works."`;
+
   return `- LESSON — THIS IS THE STORY'S CORE: "${lesson}" is not decoration — it IS the plot. Structure the story so the lesson is unavoidable:
+  * ${arcInstruction}
   * Page 1-2: The character faces a situation that REQUIRES them to choose whether to demonstrate "${lesson}" — they haven't learned it yet or are being tested.
   * Middle pages: The character struggles, fails once, or faces resistance. Show the cost of NOT having "${lesson}". Make it feel real.
   * Page near end: The character chooses to embrace "${lesson}" — a clear, specific ACTION they take (not a thought or feeling — they DO something).
@@ -266,7 +275,7 @@ function buildLessonInstruction(lesson, ageNum) {
   * The lesson must be the reason the story exists — if you removed "${lesson}" from the plot, the whole story would fall apart.`;
 }
 
-async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom) {
+async function generateStory(childName, age, interests, theme, mood, previousStory, options, lesson, appearance, customHero, language, isFamilyPlus, storyMode, justWatching, isClassroom, progressLevel) {
   const interestList = interests.join(", ");
   const ageNum = resolveAge(age);
   const ageStyle = getAgeStyle(age, options?.pageCount);
@@ -324,7 +333,7 @@ RULES:
 - Generate exactly ${ageStyle.pages} pages — no more, no less
 - Follow the PAGE-BY-PAGE STRUCTURE above exactly. Each page must do what its blueprint says.
 - Use ${childName}'s name naturally — not on every single line, just when it feels right
-${lesson ? `${buildLessonInstruction(lesson, ageNum)}${interestList ? `
+${lesson ? `${buildLessonInstruction(lesson, ageNum, progressLevel)}${interestList ? `
 - INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the SETTING and backdrop only — it flavors the world but the lesson above is the story's core plot driver" : "these interests as the setting and backdrop — they flavor the world but the lesson above is the story's core plot driver. DO NOT let interests override the lesson."}` : ""}`
 : interestList ? `- INTERESTS (${interestList}): use ${interests.length === 1 ? "this interest as the HEART of the story — build the entire world around it" : "these interests — pick 1-2 as the main focus and let others appear naturally if they fit. DO NOT force all of them in."}` : `- No specific interests provided — choose a setting and world that will delight a ${resolveAge(age)}-year-old based on the theme and mood.`}
 - Theme: ${theme || "adventure"}. Mood: ${mood || "magical"}
@@ -663,7 +672,7 @@ Return ONLY valid JSON with no markdown:
 });
 
 app.post("/generate-full-story", async (req, res) => {
-  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, justWatching, isClassroom, language, narrator, plan, storyMode } = req.body;
+  const { childName, age, interests, theme, mood, previousStory, illustrationStyle, pageCount, lesson, appearance, customHero, justWatching, isClassroom, language, narrator, plan, storyMode, goal, progressLevel } = req.body;
   const imgStyle = illustrationStyle || "cartoon";
   const lang = language || "en";
   const narratorKey = narrator || DEFAULT_NARRATOR;
@@ -690,6 +699,8 @@ app.post("/generate-full-story", async (req, res) => {
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         status: "generating", progress: 0, pages: [], language: lang,
         lesson: lesson || null,
+        goal: goal || null,
+        progress_level: progressLevel || null,
         series_id: previousStory?.series_id || previousStory?.seriesId || null,
         episode: previousStory ? (previousStory.episode || 1) + 1 : 1
       });
@@ -703,7 +714,7 @@ app.post("/generate-full-story", async (req, res) => {
       }
     };
 
-    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus, activeStoryMode, justWatching, isClassroom);
+    const storyData = await generateStoryWithRetry(childName, age, interests, theme, mood, previousStory || null, { pageCount }, lesson, appearance, customHero, lang, isFamilyPlus, activeStoryMode, justWatching, isClassroom, progressLevel || 1);
     await updateProgress(15, "generating");
 
     if (appearance && appearance.trim()) {
