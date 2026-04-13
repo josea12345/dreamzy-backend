@@ -447,10 +447,12 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     ? `VISUAL WORLD (maintain these exact visual elements throughout): ${worldDescription}.`
     : "";
 
-  // Reference-image anchor — when a previous page is supplied, tell Gemini to match it exactly.
-  // We anchor to page 1 (not rolling N-1) so drift can't compound across a long story.
+  // Reference-image anchor — when a previous page is supplied, use it to keep the character's
+  // IDENTITY locked (same kid) while explicitly freeing up pose/angle/framing/background.
+  // Without this "do not copy composition" instruction, Gemini tends to reproduce page 1
+  // and the book feels static.
   const referenceNote = previousPageBase64
-    ? "REFERENCE IMAGE ATTACHED: the attached image is page 1 of this same story. The main character must look IDENTICAL to the character in that image — same face shape, same hair, same eye color, same skin tone, same clothing, same proportions, same art style, same color palette, same line weight. Treat the attached image as the canonical appearance of this character."
+    ? "REFERENCE IMAGE ATTACHED: the attached image shows the SAME CHARACTER from page 1 of this story. Use it ONLY to keep the character's IDENTITY consistent — same face shape, same hair color and style, same skin tone, same clothing, same art style and color palette. DO NOT copy the pose, camera angle, framing, background, or composition from the reference. This is a NEW SCENE — invent a fresh composition with a different pose, different camera angle, and different background that best tells the SCENE described below."
     : "";
 
   const fullPrompt = [
@@ -461,12 +463,13 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     referenceNote,
     `SCENE: ${prompt}`,
     "CRITICAL CONSISTENCY RULES:",
-    "- The main character must look IDENTICAL to the CHARACTER DESCRIPTION above — same face, same hair, same clothes, same proportions",
-    "- Same art style, same color palette, same line weight as described in the style",
+    "- Character IDENTITY stays the same across every page (face, hair, skin tone, clothing, proportions)",
+    "- Same art style, same color palette, same line weight throughout the book",
+    "- Each page is a DIFFERENT scene — vary the pose, camera angle, framing, and background to match the action. Wide shots, close-ups, over-the-shoulder angles, dynamic poses all welcome",
     "- Show the character ACTIVELY doing the described action with a clear expressive emotion",
     "- NO text, letters, words, numbers, or signs anywhere in the image",
-    "- Full color illustration. Strong focal point. Child-friendly. Expressive faces.",
-    "- Same lighting style and color temperature throughout the story",
+    "- Full color illustration. Strong focal point. Child-friendly. Expressive faces",
+    "- Consistent lighting mood across the book, but lighting can shift with the scene (day/night/indoor/outdoor as the story dictates)",
   ].filter(Boolean).join(" ");
 
   // Build request parts — attach the anchor image first (if provided), then the prompt.
