@@ -433,7 +433,7 @@ async function uploadImageToStorage(base64Data, storyId, pageIndex) {
   }
 }
 
-async function generateImage(prompt, characterDescription, style, attempt, worldDescription, previousPageBase64) {
+async function generateImage(prompt, characterDescription, style, attempt, worldDescription) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
 
@@ -447,20 +447,11 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     ? `VISUAL WORLD (maintain these exact visual elements throughout): ${worldDescription}.`
     : "";
 
-  // Reference-image anchor — when a previous page is supplied, use it to keep the character's
-  // IDENTITY locked (same kid) while explicitly freeing up pose/angle/framing/background.
-  // Without this "do not copy composition" instruction, Gemini tends to reproduce page 1
-  // and the book feels static.
-  const referenceNote = previousPageBase64
-    ? "REFERENCE IMAGE ATTACHED: the attached image shows the SAME CHARACTER from page 1 of this story. Use it ONLY to keep the character's IDENTITY consistent — same face shape, same hair color and style, same skin tone, same clothing, same art style and color palette. DO NOT copy the pose, camera angle, framing, background, or composition from the reference. This is a NEW SCENE — invent a fresh composition with a different pose, different camera angle, and different background that best tells the SCENE described below."
-    : "";
-
   const fullPrompt = [
     stylePrompt,
     "CHILDREN'S BOOK ILLUSTRATION — FULL PAGE.",
     characterLock,
     worldLock,
-    referenceNote,
     `SCENE: ${prompt}`,
     "CRITICAL CONSISTENCY RULES:",
     "- Character IDENTITY stays the same across every page (face, hair, skin tone, clothing, proportions)",
@@ -472,21 +463,11 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     "- Consistent lighting mood across the book, but lighting can shift with the scene (day/night/indoor/outdoor as the story dictates)",
   ].filter(Boolean).join(" ");
 
-  // Build request parts — attach the anchor image first (if provided), then the prompt.
-  const requestParts = [];
-  if (previousPageBase64) {
-    const m = previousPageBase64.match(/^data:([^;]+);base64,(.+)$/);
-    if (m) {
-      requestParts.push({ inline_data: { mime_type: m[1], data: m[2] } });
-    }
-  }
-  requestParts.push({ text: fullPrompt });
-
   try {
     const response = await axios.post(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" + process.env.GEMINI_KEY,
       {
-        contents: [{ parts: requestParts }],
+        contents: [{ parts: [{ text: fullPrompt }] }],
         generationConfig: { responseModalities: ["IMAGE", "TEXT"] }
       },
       { headers: { "Content-Type": "application/json" } }
@@ -500,7 +481,7 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     if (e.response?.status === 429 && attempt < 3) {
       console.log("    Rate limited, waiting 10s...");
       await sleep(10000);
-      return generateImage(prompt, characterDescription, style, attempt + 1, worldDescription, previousPageBase64);
+      return generateImage(prompt, characterDescription, style, attempt + 1, worldDescription);
     }
     throw e;
   }
@@ -779,8 +760,6 @@ app.post("/generate-full-story", async (req, res) => {
     // ── Page images — sequential ─────────────────────────────────────────────
     const imageUrls = [];
     let worldDescription = null; // Built from page 1, injected into all subsequent pages
-    let firstPageBase64 = null;  // Page 1's generated image — passed to pages 2+ as a visual anchor
-                                 // so the character appearance stays locked across the whole story.
 
     for (let i = 0; i < storyData.pages.length; i++) {
       console.log("  Image " + (i + 1) + "/" + storyData.pages.length + "...");
@@ -801,18 +780,10 @@ app.post("/generate-full-story", async (req, res) => {
       }
 
       let url = null;
-      let pageBase64 = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          pageBase64 = await generateImage(
-            storyData.pages[i].illustrationPrompt,
-            storyData.characterDescription,
-            imgStyle,
-            undefined,
-            worldDescription,
-            i > 0 ? firstPageBase64 : null
-          );
-          url = await uploadImageToStorage(pageBase64, genId, i + 1);
+          const base64 = await generateImage(storyData.pages[i].illustrationPrompt, storyData.characterDescription, imgStyle, undefined, worldDescription);
+          url = await uploadImageToStorage(base64, genId, i + 1);
           if (!url) console.warn(`  Page ${i+1} storage upload failed, imageUrl will be null`);
           break;
         } catch (e) {
@@ -820,8 +791,6 @@ app.post("/generate-full-story", async (req, res) => {
           if (attempt < 2) await sleep(2000);
         }
       }
-      // Save page 1's base64 as the canonical character reference for the rest of the story.
-      if (i === 0 && pageBase64) firstPageBase64 = pageBase64;
       imageUrls.push(url); // null entries are handled gracefully by frontend
     }
 
