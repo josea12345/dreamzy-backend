@@ -487,6 +487,50 @@ async function generateImage(prompt, characterDescription, style, attempt, world
   }
 }
 
+// Extract a rich visual character description from page 1's generated image.
+// Returns a detailed text description (hair, eyes, skin, clothing, distinguishing features)
+// that we pass as text on pages 2+ — gives us identity lock without the static "copy the
+// whole image" pull that attaching the actual image causes.
+// On any failure, returns null and the caller falls back to the original seedDescription.
+async function extractCharacterDetails(pageBase64, seedDescription) {
+  try {
+    const m = pageBase64.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) return null;
+    const [, mimeType, data] = m;
+
+    const instruction = [
+      "You are looking at page 1 of a children's book illustration.",
+      "Describe the MAIN CHARACTER's visual appearance in detail — 3 to 5 short sentences.",
+      "Cover: hair color and exact style, eye color, skin tone, face shape, clothing (every visible garment and its color/pattern), any accessories, and any distinguishing features.",
+      "Describe ONLY the character's appearance, not the background or pose or action.",
+      "Be specific and concrete — another illustrator should be able to redraw this exact character from your description alone.",
+      seedDescription ? `For context, the character was originally described as: "${seedDescription}". Use this as a starting point but add the visual specifics you can see.` : "",
+    ].filter(Boolean).join(" ");
+
+    const response = await axios.post(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + process.env.GEMINI_KEY,
+      {
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data } },
+            { text: instruction },
+          ]
+        }],
+        generationConfig: { responseModalities: ["TEXT"] },
+      },
+      { headers: { "Content-Type": "application/json" }, timeout: 20000 }
+    );
+    const parts = response.data?.candidates?.[0]?.content?.parts || [];
+    const text = parts.map(p => p.text).filter(Boolean).join(" ").trim();
+    if (!text) return null;
+    console.log("    Character details extracted (" + text.length + " chars)");
+    return text;
+  } catch (e) {
+    console.warn("  Character extraction failed, falling back to seed description:", e.message);
+    return null;
+  }
+}
+
 // ElevenLabs language codes for eleven_turbo_v2_5
 const ELEVENLABS_LANG_CODES = {
   en: "en", es_es: "es", es_la: "es", fr: "fr", pt: "pt", de: "de"
@@ -760,6 +804,10 @@ app.post("/generate-full-story", async (req, res) => {
     // ── Page images — sequential ─────────────────────────────────────────────
     const imageUrls = [];
     let worldDescription = null; // Built from page 1, injected into all subsequent pages
+    // Character description used for each page. Starts as the seed description; after page 1
+    // renders we extract a richer visual description from the actual image and use that on
+    // pages 2+ to lock identity without visually copying page 1's composition.
+    let activeCharacterDescription = storyData.characterDescription;
 
     for (let i = 0; i < storyData.pages.length; i++) {
       console.log("  Image " + (i + 1) + "/" + storyData.pages.length + "...");
@@ -780,10 +828,11 @@ app.post("/generate-full-story", async (req, res) => {
       }
 
       let url = null;
+      let pageBase64 = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const base64 = await generateImage(storyData.pages[i].illustrationPrompt, storyData.characterDescription, imgStyle, undefined, worldDescription);
-          url = await uploadImageToStorage(base64, genId, i + 1);
+          pageBase64 = await generateImage(storyData.pages[i].illustrationPrompt, activeCharacterDescription, imgStyle, undefined, worldDescription);
+          url = await uploadImageToStorage(pageBase64, genId, i + 1);
           if (!url) console.warn(`  Page ${i+1} storage upload failed, imageUrl will be null`);
           break;
         } catch (e) {
@@ -792,6 +841,19 @@ app.post("/generate-full-story", async (req, res) => {
         }
       }
       imageUrls.push(url); // null entries are handled gracefully by frontend
+
+      // After page 1 succeeds, extract a detailed visual description from the generated image
+      // and use it as the character description on all subsequent pages. This gives us a
+      // stronger identity lock than the seed description alone without forcing Gemini to copy
+      // page 1's composition.
+      if (i === 0 && pageBase64) {
+        const extracted = await extractCharacterDetails(pageBase64, storyData.characterDescription);
+        if (extracted) {
+          activeCharacterDescription = storyData.characterDescription
+            ? `${storyData.characterDescription}. Detailed appearance (as rendered on page 1): ${extracted}`
+            : extracted;
+        }
+      }
     }
 
     // ── Narration ────────────────────────────────────────────────────────────
