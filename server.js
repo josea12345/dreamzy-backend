@@ -433,7 +433,7 @@ async function uploadImageToStorage(base64Data, storyId, pageIndex) {
   }
 }
 
-async function generateImage(prompt, characterDescription, style, attempt, worldDescription, previousPageBase64) {
+async function generateImage(prompt, characterDescription, style, attempt, worldDescription) {
   if (attempt === undefined) attempt = 0;
   const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.cartoon;
 
@@ -447,20 +447,11 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     ? `VISUAL WORLD (maintain these exact visual elements throughout): ${worldDescription}.`
     : "";
 
-  // Reference-image anchor — when a previous page is supplied, use it to keep the character's
-  // IDENTITY locked (same kid) while explicitly freeing up pose/angle/framing/background.
-  // Without this "do not copy composition" instruction, Gemini tends to reproduce page 1
-  // and the book feels static.
-  const referenceNote = previousPageBase64
-    ? "REFERENCE IMAGE ATTACHED: the attached image shows the SAME CHARACTER from page 1 of this story. Use it ONLY to keep the character's IDENTITY consistent — same face shape, same hair color and style, same skin tone, same clothing, same art style and color palette. DO NOT copy the pose, camera angle, framing, background, or composition from the reference. This is a NEW SCENE — invent a fresh composition with a different pose, different camera angle, and different background that best tells the SCENE described below."
-    : "";
-
   const fullPrompt = [
     stylePrompt,
     "CHILDREN'S BOOK ILLUSTRATION — FULL PAGE.",
     characterLock,
     worldLock,
-    referenceNote,
     `SCENE: ${prompt}`,
     "CRITICAL CONSISTENCY RULES:",
     "- Character IDENTITY stays the same across every page (face, hair, skin tone, clothing, proportions)",
@@ -472,21 +463,11 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     "- Consistent lighting mood across the book, but lighting can shift with the scene (day/night/indoor/outdoor as the story dictates)",
   ].filter(Boolean).join(" ");
 
-  // Build request parts — attach the anchor image first (if provided), then the prompt.
-  const requestParts = [];
-  if (previousPageBase64) {
-    const m = previousPageBase64.match(/^data:([^;]+);base64,(.+)$/);
-    if (m) {
-      requestParts.push({ inline_data: { mime_type: m[1], data: m[2] } });
-    }
-  }
-  requestParts.push({ text: fullPrompt });
-
   try {
     const response = await axios.post(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" + process.env.GEMINI_KEY,
       {
-        contents: [{ parts: requestParts }],
+        contents: [{ parts: [{ text: fullPrompt }] }],
         generationConfig: { responseModalities: ["IMAGE", "TEXT"] }
       },
       { headers: { "Content-Type": "application/json" } }
@@ -500,9 +481,53 @@ async function generateImage(prompt, characterDescription, style, attempt, world
     if (e.response?.status === 429 && attempt < 3) {
       console.log("    Rate limited, waiting 10s...");
       await sleep(10000);
-      return generateImage(prompt, characterDescription, style, attempt + 1, worldDescription, previousPageBase64);
+      return generateImage(prompt, characterDescription, style, attempt + 1, worldDescription);
     }
     throw e;
+  }
+}
+
+// Extract a rich visual character description from page 1's generated image.
+// Returns a detailed text description (hair, eyes, skin, clothing, distinguishing features)
+// that we pass as text on pages 2+ — gives us identity lock without the static "copy the
+// whole image" pull that attaching the actual image causes.
+// On any failure, returns null and the caller falls back to the original seedDescription.
+async function extractCharacterDetails(pageBase64, seedDescription) {
+  try {
+    const m = pageBase64.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) return null;
+    const [, mimeType, data] = m;
+
+    const instruction = [
+      "You are looking at page 1 of a children's book illustration.",
+      "Describe the MAIN CHARACTER's visual appearance in detail — 3 to 5 short sentences.",
+      "Cover: hair color and exact style, eye color, skin tone, face shape, clothing (every visible garment and its color/pattern), any accessories, and any distinguishing features.",
+      "Describe ONLY the character's appearance, not the background or pose or action.",
+      "Be specific and concrete — another illustrator should be able to redraw this exact character from your description alone.",
+      seedDescription ? `For context, the character was originally described as: "${seedDescription}". Use this as a starting point but add the visual specifics you can see.` : "",
+    ].filter(Boolean).join(" ");
+
+    const response = await axios.post(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + process.env.GEMINI_KEY,
+      {
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data } },
+            { text: instruction },
+          ]
+        }],
+        generationConfig: { responseModalities: ["TEXT"] },
+      },
+      { headers: { "Content-Type": "application/json" }, timeout: 20000 }
+    );
+    const parts = response.data?.candidates?.[0]?.content?.parts || [];
+    const text = parts.map(p => p.text).filter(Boolean).join(" ").trim();
+    if (!text) return null;
+    console.log("    Character details extracted (" + text.length + " chars)");
+    return text;
+  } catch (e) {
+    console.warn("  Character extraction failed, falling back to seed description:", e.message);
+    return null;
   }
 }
 
@@ -779,8 +804,10 @@ app.post("/generate-full-story", async (req, res) => {
     // ── Page images — sequential ─────────────────────────────────────────────
     const imageUrls = [];
     let worldDescription = null; // Built from page 1, injected into all subsequent pages
-    let firstPageBase64 = null;  // Page 1's generated image — passed to pages 2+ as a visual anchor
-                                 // so the character appearance stays locked across the whole story.
+    // Character description used for each page. Starts as the seed description; after page 1
+    // renders we extract a richer visual description from the actual image and use that on
+    // pages 2+ to lock identity without visually copying page 1's composition.
+    let activeCharacterDescription = storyData.characterDescription;
 
     for (let i = 0; i < storyData.pages.length; i++) {
       console.log("  Image " + (i + 1) + "/" + storyData.pages.length + "...");
@@ -804,14 +831,7 @@ app.post("/generate-full-story", async (req, res) => {
       let pageBase64 = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          pageBase64 = await generateImage(
-            storyData.pages[i].illustrationPrompt,
-            storyData.characterDescription,
-            imgStyle,
-            undefined,
-            worldDescription,
-            i > 0 ? firstPageBase64 : null
-          );
+          pageBase64 = await generateImage(storyData.pages[i].illustrationPrompt, activeCharacterDescription, imgStyle, undefined, worldDescription);
           url = await uploadImageToStorage(pageBase64, genId, i + 1);
           if (!url) console.warn(`  Page ${i+1} storage upload failed, imageUrl will be null`);
           break;
@@ -820,9 +840,20 @@ app.post("/generate-full-story", async (req, res) => {
           if (attempt < 2) await sleep(2000);
         }
       }
-      // Save page 1's base64 as the canonical character reference for the rest of the story.
-      if (i === 0 && pageBase64) firstPageBase64 = pageBase64;
       imageUrls.push(url); // null entries are handled gracefully by frontend
+
+      // After page 1 succeeds, extract a detailed visual description from the generated image
+      // and use it as the character description on all subsequent pages. This gives us a
+      // stronger identity lock than the seed description alone without forcing Gemini to copy
+      // page 1's composition.
+      if (i === 0 && pageBase64) {
+        const extracted = await extractCharacterDetails(pageBase64, storyData.characterDescription);
+        if (extracted) {
+          activeCharacterDescription = storyData.characterDescription
+            ? `${storyData.characterDescription}. Detailed appearance (as rendered on page 1): ${extracted}`
+            : extracted;
+        }
+      }
     }
 
     // ── Narration ────────────────────────────────────────────────────────────
