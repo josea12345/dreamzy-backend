@@ -3,3 +3,6 @@ node_modules
 .env.save
 .env
 .env.*
+
+# Standalone tool outputs (not production code)
+banana-out/
